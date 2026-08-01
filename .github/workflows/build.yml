@@ -21,6 +21,8 @@ jobs:
       - run: >-
           python -m PyInstaller --noconfirm --clean --onefile --windowed
           --name "Audio Config Manager"
+          --icon "assets/app-icon.ico"
+          --add-data "assets/app-icon.ico;assets"
           --collect-all winappaudiorouter
           --collect-all pycaw
           --collect-all comtypes
