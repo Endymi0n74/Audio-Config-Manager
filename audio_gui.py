@@ -31,7 +31,7 @@ from tkinter.scrolledtext import ScrolledText
 
 
 APP_NAME = "Audio Config Manager"
-APP_VERSION = "6.0.0"
+APP_VERSION = "6.1.0"
 SCHEMA_NAME = "audio-config-manager"
 SCHEMA_VERSION = 2
 GITHUB_REPOSITORY = "Endymi0n74/Audioconfigmanager"
@@ -676,6 +676,148 @@ class AudioConfigGUI:
         self.dependency_label = tk.Label(status_row, text="AudioDeviceCmdlets est requis pour les périphériques globaux", font=("Segoe UI", 8), bg="#0e172d", fg=self.DIM)
         self.dependency_label.pack(side=tk.RIGHT, padx=(0, 18))
 
+    def _build_ui(self) -> None:
+        """V6.1 dashboard layout inspired by the supplied visual reference."""
+        self.root.geometry("1120x840")
+        self.root.minsize(1000, 720)
+        app = tk.Frame(self.root, bg=self.BG)
+        app.pack(fill=tk.BOTH, expand=True)
+
+        sidebar = tk.Frame(app, bg="#070d1a", width=232, highlightbackground="#1d2942", highlightthickness=1)
+        sidebar.pack(side=tk.LEFT, fill=tk.Y)
+        sidebar.pack_propagate(False)
+        brand = tk.Frame(sidebar, bg="#070d1a")
+        brand.pack(fill=tk.X, padx=20, pady=(30, 28))
+        logo = tk.Canvas(brand, width=50, height=50, bg="#070d1a", highlightthickness=0)
+        logo.pack(side=tk.LEFT)
+        logo.create_oval(2, 2, 48, 48, fill=self.BLUE, outline=self.BLUE)
+        for x, h in ((16, 12), (21, 20), (26, 27), (31, 18), (36, 10)):
+            logo.create_line(x, 25-h//2, x, 25+h//2, fill="white", width=2)
+        brand_text = tk.Frame(brand, bg="#070d1a")
+        brand_text.pack(side=tk.LEFT, padx=(12, 0))
+        tk.Label(brand_text, text="Audio Config", font=("Segoe UI", 12, "bold"), bg="#070d1a", fg=self.FG).pack(anchor="w")
+        tk.Label(brand_text, text="Manager", font=("Segoe UI", 12, "bold"), bg="#070d1a", fg=self.FG).pack(anchor="w")
+        tk.Label(brand_text, text="Windows 10 & 11", font=("Segoe UI", 8), bg="#070d1a", fg=self.MUTED).pack(anchor="w", pady=(4, 0))
+
+        nav = tk.Frame(sidebar, bg="#171532", highlightbackground="#8b5cf6", highlightthickness=1, cursor="hand2")
+        nav.pack(fill=tk.X, padx=18, pady=(0, 10))
+        tk.Label(nav, text="≋  Tableau de bord", font=("Segoe UI", 10, "bold"), bg="#171532", fg=self.FG, padx=14, pady=14).pack(anchor="w")
+        settings = tk.Label(sidebar, text="⚙  Paramètres", font=("Segoe UI Symbol", 10, "bold"), bg="#070d1a", fg="#7785a5", padx=30, pady=12, cursor="hand2")
+        settings.pack(fill=tk.X, anchor="w")
+        settings.bind("<Button-1>", self._choose_folder)
+
+        side_bottom = tk.Frame(sidebar, bg="#101827", highlightbackground="#263451", highlightthickness=1)
+        side_bottom.pack(side=tk.BOTTOM, fill=tk.X, padx=18, pady=(0, 18))
+        self.status_dot = tk.Label(side_bottom, text="●", font=("Segoe UI", 9), bg="#101827", fg=self.DIM)
+        self.status_dot.pack(side=tk.LEFT, padx=(12, 8), pady=14)
+        self.status = tk.Label(side_bottom, text="Vérification…", font=("Segoe UI", 9, "bold"), bg="#101827", fg=self.MUTED)
+        self.status.pack(side=tk.LEFT, pady=14)
+        tk.Label(sidebar, text="Version 6.1.0 portable", font=("Segoe UI", 7), bg="#070d1a", fg="#4e5b78").pack(side=tk.BOTTOM, pady=8)
+
+        main = tk.Frame(app, bg="#080d1d")
+        main.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        content = tk.Frame(main, bg="#080d1d")
+        content.pack(fill=tk.BOTH, expand=True, padx=46, pady=(38, 28))
+        title_row = tk.Frame(content, bg="#080d1d")
+        title_row.pack(fill=tk.X)
+        title_text = tk.Frame(title_row, bg="#080d1d")
+        title_text.pack(side=tk.LEFT)
+        tk.Label(title_text, text="S A U V E G A R D E   A U D I O", font=("Segoe UI", 7, "bold"), bg="#080d1d", fg="#8b5cf6").pack(anchor="w")
+        tk.Label(title_text, text="Retrouvez votre son,", font=("Segoe UI", 25, "bold"), bg="#080d1d", fg=self.FG).pack(anchor="w", pady=(10, 0))
+        tk.Label(title_text, text="exactement comme avant.", font=("Segoe UI", 25), bg="#080d1d", fg="#a9b9df").pack(anchor="w")
+        tk.Label(title_text, text="Profils rapides, restauration contrôlée et dossier de sauvegarde personnalisable.", font=("Segoe UI", 10), bg="#080d1d", fg=self.MUTED).pack(anchor="w", pady=(8, 0))
+        refresh = tk.Label(title_row, text="⟳", font=("Segoe UI Symbol", 20), bg="#101827", fg=self.MUTED, padx=12, pady=8, cursor="hand2")
+        refresh.pack(side=tk.RIGHT, anchor="n")
+        refresh.bind("<Button-1>", lambda _e: self._refresh_overview())
+
+        overview = tk.Frame(content, bg="#101728", highlightbackground="#2a3857", highlightthickness=1)
+        overview.pack(fill=tk.X, pady=(28, 16))
+        overview_head = tk.Frame(overview, bg="#101728")
+        overview_head.pack(fill=tk.X, padx=22, pady=(18, 10))
+        head_left = tk.Frame(overview_head, bg="#101728")
+        head_left.pack(side=tk.LEFT)
+        tk.Label(head_left, text="S Y S T È M E   A C T U E L", font=("Segoe UI", 7, "bold"), bg="#101728", fg="#8b5cf6").pack(anchor="w")
+        tk.Label(head_left, text="Vue d’ensemble", font=("Segoe UI", 13, "bold"), bg="#101728", fg=self.FG).pack(anchor="w", pady=(7, 0))
+        self.ready_badge = tk.Label(overview_head, text="●  Analyse…", font=("Segoe UI", 8, "bold"), bg="#102a28", fg=self.GREEN, padx=12, pady=7)
+        self.ready_badge.pack(side=tk.RIGHT)
+        summaries = tk.Frame(overview, bg="#101728")
+        summaries.pack(fill=tk.X, padx=22, pady=(4, 22))
+        for index in range(3):
+            summaries.columnconfigure(index, weight=1, uniform="summary")
+        self.output_summary = self._summary_card(summaries, 0, "◖", "Sortie par défaut", "Détection…", "Périphériques de lecture", "#261e52", "#a78bfa")
+        self.input_summary = self._summary_card(summaries, 1, "♩", "Entrée par défaut", "Détection…", "Périphériques d’entrée", "#12334b", "#58c7ec")
+        self.path_summary = self._summary_card(summaries, 2, "□", "Dossier des profils", Path(self.default_folder).name, self.default_folder, "#123c39", self.GREEN)
+        self.path_label = self.path_summary
+
+        actions = tk.Frame(content, bg="#080d1d")
+        actions.pack(fill=tk.X)
+        actions.columnconfigure(0, weight=1, uniform="action")
+        actions.columnconfigure(1, weight=1, uniform="action")
+        save_card = tk.Frame(actions, bg="#25214d", highlightbackground="#574e92", highlightthickness=1)
+        save_card.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        tk.Label(save_card, text="▣", font=("Segoe UI Symbol", 19), bg="#313052", fg=self.FG, padx=10, pady=6).pack(anchor="w", padx=22, pady=(20, 10))
+        tk.Label(save_card, text="Sauvegarder", font=("Segoe UI", 16, "bold"), bg="#25214d", fg=self.FG).pack(anchor="w", padx=22)
+        tk.Label(save_card, text="Capture les appareils, volumes et choix par application\ndans un profil réutilisable.", justify=tk.LEFT, font=("Segoe UI", 8), bg="#25214d", fg=self.MUTED).pack(anchor="w", padx=22, pady=(10, 12))
+        save_row = tk.Frame(save_card, bg="#25214d")
+        save_row.pack(fill=tk.X, padx=22, pady=(0, 20))
+        self.profile_name = tk.Entry(save_row, font=("Segoe UI", 10), bg="#12152b", fg=self.FG, insertbackground=self.FG, relief=tk.FLAT)
+        self.profile_name.insert(0, "Mon profil audio")
+        self.profile_name.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=10)
+        self.export_card = tk.Button(save_row, text="▣  Enregistrer", command=self._choose_export, font=("Segoe UI", 10, "bold"), bg="#8057f5", fg="white", activebackground="#936fff", border=0, padx=16, pady=10, cursor="hand2")
+        self.export_card.pack(side=tk.RIGHT, padx=(8, 0))
+
+        restore_card = tk.Frame(actions, bg="#123145", highlightbackground="#28516b", highlightthickness=1)
+        restore_card.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
+        tk.Label(restore_card, text="◴", font=("Segoe UI Symbol", 19), bg="#263b4d", fg=self.FG, padx=10, pady=6).pack(anchor="w", padx=22, pady=(20, 10))
+        tk.Label(restore_card, text="Restaurer", font=("Segoe UI", 16, "bold"), bg="#123145", fg=self.FG).pack(anchor="w", padx=22)
+        tk.Label(restore_card, text="Prévisualisez et choisissez précisément les éléments\nà remettre en place.", justify=tk.LEFT, font=("Segoe UI", 8), bg="#123145", fg=self.MUTED).pack(anchor="w", padx=22, pady=(10, 12))
+        self.import_card = tk.Button(restore_card, text="↥     Importer un JSON                         ›", command=self._choose_import, font=("Segoe UI", 10), bg="#10283a", fg=self.FG, activebackground="#173a52", highlightbackground="#39728f", highlightthickness=1, border=0, pady=11, cursor="hand2")
+        self.import_card.pack(fill=tk.X, padx=22, pady=(0, 20))
+        self.action_cards = [self.export_card, self.import_card]
+
+        history_panel = tk.Frame(content, bg="#101728", highlightbackground="#2a3857", highlightthickness=1)
+        history_panel.pack(fill=tk.X, pady=(16, 0))
+        history_text = tk.Frame(history_panel, bg="#101728")
+        history_text.pack(side=tk.LEFT, padx=22, pady=16)
+        tk.Label(history_text, text="P R O F I L S   &   H I S T O R I Q U E", font=("Segoe UI", 7, "bold"), bg="#101728", fg="#8b5cf6").pack(anchor="w")
+        self.history_count = tk.Label(history_text, text="Vos sauvegardes", font=("Segoe UI", 13, "bold"), bg="#101728", fg=self.FG)
+        self.history_count.pack(anchor="w", pady=(6, 0))
+        self.history_link = tk.Button(history_panel, text="Ouvrir", command=self._show_history, font=("Segoe UI", 9, "bold"), bg="#182239", fg=self.FG, border=0, padx=16, pady=9, cursor="hand2")
+        self.history_link.pack(side=tk.RIGHT, padx=22)
+        self.report_link = tk.Button(history_panel, text="Rapport", command=self._show_report, font=("Segoe UI", 9, "bold"), bg="#182239", fg=self.FG, border=0, padx=16, pady=9, cursor="hand2")
+        self.report_link.pack(side=tk.RIGHT)
+        self.dependency_label = tk.Label(history_panel, text="", bg="#101728", fg=self.DIM)
+        self.install_link = tk.Button(history_panel, text="Installer AudioDeviceCmdlets", command=self._install_dependencies, font=("Segoe UI", 8, "bold"), bg=self.YELLOW, fg=self.BG, border=0)
+
+    def _summary_card(self, parent: tk.Widget, column: int, symbol: str, label: str, value: str, detail: str, icon_bg: str, icon_fg: str) -> tk.Label:
+        card = tk.Frame(parent, bg="#0e1628", highlightbackground="#263451", highlightthickness=1)
+        card.grid(row=0, column=column, sticky="nsew", padx=(0, 7) if column < 2 else (7, 0))
+        tk.Label(card, text=symbol, font=("Segoe UI Symbol", 17), bg=icon_bg, fg=icon_fg, padx=10, pady=8).pack(side=tk.LEFT, padx=14, pady=16)
+        text = tk.Frame(card, bg="#0e1628")
+        text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=14)
+        tk.Label(text, text=label, font=("Segoe UI", 7), bg="#0e1628", fg=self.MUTED).pack(anchor="w")
+        value_label = tk.Label(text, text=value, font=("Segoe UI", 9, "bold"), bg="#0e1628", fg=self.FG, anchor="w")
+        value_label.pack(fill=tk.X, pady=(4, 0))
+        value_label.detail_label = tk.Label(text, text=detail, font=("Segoe UI", 7), bg="#0e1628", fg=self.DIM, anchor="w")
+        value_label.detail_label.pack(fill=tk.X, pady=(4, 0))
+        return value_label
+
+    def _refresh_overview(self) -> None:
+        self.ready_badge.config(text="●  Analyse…", fg=self.YELLOW)
+        def load() -> dict[str, Any]:
+            return _run_powershell(GLOBAL_EXPORT_SCRIPT)
+        def done(data: dict[str, Any]) -> None:
+            defaults = data.get("defaults", {})
+            playback = defaults.get("playback") or {}
+            recording = defaults.get("recording") or {}
+            self.output_summary.config(text=playback.get("name") or "Aucune sortie")
+            self.output_summary.detail_label.config(text=f"{len(data.get('playbackDevices', []))} sorties détectées")
+            self.input_summary.config(text=recording.get("name") or "Aucune entrée")
+            self.input_summary.detail_label.config(text=f"{len(data.get('recordingDevices', []))} entrées détectées")
+            self.history_count.config(text=f"{len(list_history())} sauvegarde(s)")
+            self.ready_badge.config(text="●  Système prêt", fg=self.GREEN)
+        self._background(load, done)
+
     def _action_card(self, parent: tk.Widget, column: int, symbol: str, accent: str, title: str, description: str, command: Callable[[], None]) -> tk.Frame:
         card = tk.Frame(parent, bg=self.CARD, highlightbackground=self.BORDER, highlightthickness=1, height=140, cursor="hand2")
         card.grid(row=0, column=column, sticky="nsew", padx=(0, 9) if column == 0 else (9, 0))
@@ -722,6 +864,7 @@ class AudioConfigGUI:
                 self._set_details(f"Prêt. AudioDeviceCmdlets {checks.get('audioDeviceCmdletsVersion', '?')} détecté.\nLe moteur de routage par application est disponible.")
                 self._set_status("Prêt à sauvegarder ou restaurer", self.GREEN)
                 self.dependency_label.config(text=f"AudioDeviceCmdlets {checks.get('audioDeviceCmdletsVersion', '?')} détecté")
+                self._refresh_overview()
         self._background(check_dependencies, done)
 
     def _set_cards_enabled(self, enabled: bool) -> None:
@@ -736,7 +879,9 @@ class AudioConfigGUI:
             self.path_label.config(text=folder)
 
     def _choose_export(self) -> None:
-        path = filedialog.asksaveasfilename(title="Exporter la configuration audio", initialdir=self.default_folder, initialfile="audio-config-v2.json", defaultextension=".json", filetypes=[("Configuration JSON", "*.json")])
+        profile = self.profile_name.get().strip() if hasattr(self, "profile_name") else "audio-config"
+        safe_name = "".join(c if c.isalnum() or c in "-_ " else "-" for c in profile).strip() or "audio-config"
+        path = filedialog.asksaveasfilename(title="Exporter la configuration audio", initialdir=self.default_folder, initialfile=f"{safe_name}.json", defaultextension=".json", filetypes=[("Configuration JSON", "*.json")])
         if path:
             self._start_operation(lambda: export_config(path), "Export en cours…")
 
