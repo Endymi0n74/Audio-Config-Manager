@@ -1,0 +1,31 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test-and-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - run: python -m unittest -v test_audio_gui.py
+      - run: >-
+          python -m PyInstaller --noconfirm --clean --onefile --windowed
+          --name "Audio Config Manager"
+          --collect-all winappaudiorouter
+          --collect-all pycaw
+          --collect-all comtypes
+          audio_gui.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Audio-Config-Manager-Windows
+          path: dist/Audio Config Manager.exe
