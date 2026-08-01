@@ -1,4 +1,4 @@
-# Audio Config Manager V6
+# Audio Config Manager 1.0
 
 Application Windows 11 pour sauvegarder et restaurer les périphériques audio,
 leurs volumes et les choix de sortie/entrée propres à chaque application.
@@ -57,4 +57,3 @@ avant d’utiliser le nouvel endpoint.
 Le routage utilise l’interface de politique audio interne de Windows employée
 par des outils comme EarTrumpet. Cette interface n’est pas officiellement
 stabilisée par Microsoft.
-
