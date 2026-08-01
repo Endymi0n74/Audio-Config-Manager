@@ -26,15 +26,16 @@ from pathlib import Path
 from typing import Any, Callable
 
 import tkinter as tk
+import customtkinter as ctk
 from tkinter import filedialog, messagebox
 from tkinter.scrolledtext import ScrolledText
 
 
 APP_NAME = "Audio Config Manager"
-APP_VERSION = "6.1.0"
+APP_VERSION = "1.0.0"
 SCHEMA_NAME = "audio-config-manager"
 SCHEMA_VERSION = 2
-GITHUB_REPOSITORY = "Endymi0n74/Audioconfigmanager"
+GITHUB_REPOSITORY = "Endymi0n74/Audio_config_manager_Windows"
 HISTORY_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "AudioConfigManager" / "history"
 POWERSHELL = shutil.which("powershell.exe") or shutil.which("powershell")
 
@@ -588,7 +589,7 @@ class AudioConfigGUI:
 
     def __init__(self, root: tk.Tk):
         self.root = root
-        root.title("Audio Config Manager V6")
+        root.title(f"Audio Config Manager {APP_VERSION}")
         root.geometry("1128x720")
         root.minsize(900, 620)
         root.configure(bg=self.BG)
@@ -802,20 +803,196 @@ class AudioConfigGUI:
         value_label.detail_label.pack(fill=tk.X, pady=(4, 0))
         return value_label
 
+    def _build_ui(self) -> None:
+        """Modern 1.0 dashboard using real rounded CustomTkinter widgets."""
+        ctk.set_appearance_mode("dark")
+        ctk.set_default_color_theme("blue")
+        self.root.geometry("1120x840")
+        self.root.minsize(1000, 720)
+        self.root.configure(bg="#070b17")
+
+        app = ctk.CTkFrame(self.root, fg_color="#070b17", corner_radius=0)
+        app.pack(fill="both", expand=True)
+
+        sidebar = ctk.CTkFrame(app, width=232, fg_color="#080d1a", corner_radius=0,
+                               border_width=1, border_color="#1b253b")
+        sidebar.pack(side="left", fill="y")
+        sidebar.pack_propagate(False)
+
+        brand = ctk.CTkFrame(sidebar, fg_color="transparent")
+        brand.pack(fill="x", padx=24, pady=(32, 30))
+        logo = ctk.CTkFrame(brand, width=50, height=50, corner_radius=16, fg_color="#667cf7")
+        logo.pack(side="left")
+        logo.pack_propagate(False)
+        ctk.CTkLabel(logo, text="▥", font=("Segoe UI Symbol", 23, "bold"), text_color="white").place(relx=.5, rely=.5, anchor="center")
+        brand_text = ctk.CTkFrame(brand, fg_color="transparent")
+        brand_text.pack(side="left", padx=(12, 0))
+        ctk.CTkLabel(brand_text, text="Audio Config\nManager", justify="left",
+                     font=("Segoe UI", 16, "bold"), text_color=self.FG).pack(anchor="w")
+        ctk.CTkLabel(brand_text, text="Windows 10 & 11", font=("Segoe UI", 11),
+                     text_color="#8390aa").pack(anchor="w", pady=(3, 0))
+
+        ctk.CTkButton(sidebar, text="  ◀▮  Tableau de bord", anchor="w", height=48,
+                      corner_radius=12, fg_color="#191630", hover_color="#242044",
+                      border_width=1, border_color="#8b5cf6", text_color=self.FG,
+                      font=("Segoe UI", 14, "bold")).pack(fill="x", padx=18)
+        ctk.CTkButton(sidebar, text="  ⚙  Paramètres", anchor="w", height=44,
+                      corner_radius=10, fg_color="transparent", hover_color="#111a2c",
+                      text_color="#77849f", font=("Segoe UI", 13, "bold"),
+                      command=self._choose_folder).pack(fill="x", padx=18, pady=(8, 0))
+
+        ctk.CTkLabel(sidebar, text=f"Version {APP_VERSION} portable", font=("Segoe UI", 9),
+                     text_color="#526078").pack(side="bottom", pady=(8, 18))
+        status_box = ctk.CTkFrame(sidebar, height=62, corner_radius=14, fg_color="#101827",
+                                  border_width=1, border_color="#28344d")
+        status_box.pack(side="bottom", fill="x", padx=18)
+        status_box.pack_propagate(False)
+        self.status_dot = ctk.CTkLabel(status_box, text="●", width=18,
+                                       font=("Segoe UI", 11), text_color=self.DIM)
+        self.status_dot.pack(side="left", padx=(12, 4))
+        self.status = ctk.CTkLabel(status_box, text="Vérification…", anchor="w",
+                                   font=("Segoe UI", 11, "bold"), text_color=self.MUTED)
+        self.status.pack(side="left", fill="x", expand=True)
+
+        scroll = ctk.CTkScrollableFrame(app, fg_color="#090d1b", corner_radius=0,
+                                        scrollbar_button_color="#30394f",
+                                        scrollbar_button_hover_color="#59647e")
+        scroll.pack(side="left", fill="both", expand=True)
+        content = ctk.CTkFrame(scroll, fg_color="transparent")
+        content.pack(fill="both", expand=True, padx=40, pady=(34, 30))
+
+        title_row = ctk.CTkFrame(content, fg_color="transparent")
+        title_row.pack(fill="x")
+        title_text = ctk.CTkFrame(title_row, fg_color="transparent")
+        title_text.pack(side="left")
+        ctk.CTkLabel(title_text, text="S A U V E G A R D E   A U D I O",
+                     font=("Segoe UI", 10, "bold"), text_color="#9665ff").pack(anchor="w")
+        ctk.CTkLabel(title_text, text="Retrouvez votre son,", font=("Segoe UI", 31, "bold"),
+                     text_color=self.FG).pack(anchor="w", pady=(8, 0))
+        ctk.CTkLabel(title_text, text="exactement comme avant.", font=("Segoe UI", 31),
+                     text_color="#aebde0").pack(anchor="w")
+        ctk.CTkLabel(title_text, text="Profils rapides, restauration contrôlée et dossier de sauvegarde personnalisable.",
+                     font=("Segoe UI", 13), text_color=self.MUTED).pack(anchor="w", pady=(7, 0))
+        ctk.CTkButton(title_row, text="↻", width=44, height=44, corner_radius=14,
+                      fg_color="#111827", hover_color="#1c2940", border_width=1,
+                      border_color="#29354d", text_color="#aebbd2",
+                      font=("Segoe UI Symbol", 22), command=self._refresh_overview).pack(side="right", anchor="n")
+
+        overview = ctk.CTkFrame(content, corner_radius=22, fg_color="#111727",
+                                border_width=1, border_color="#2a354d")
+        overview.pack(fill="x", pady=(28, 16))
+        overview_head = ctk.CTkFrame(overview, fg_color="transparent")
+        overview_head.pack(fill="x", padx=22, pady=(20, 12))
+        head_left = ctk.CTkFrame(overview_head, fg_color="transparent")
+        head_left.pack(side="left")
+        ctk.CTkLabel(head_left, text="S Y S T È M E   A C T U E L", font=("Segoe UI", 9, "bold"),
+                     text_color="#9665ff").pack(anchor="w")
+        ctk.CTkLabel(head_left, text="Vue d’ensemble", font=("Segoe UI", 16, "bold"),
+                     text_color=self.FG).pack(anchor="w", pady=(5, 0))
+        self.ready_badge = ctk.CTkLabel(overview_head, text="●  Analyse…", width=100, height=31,
+                                        corner_radius=16, fg_color="#102925", text_color=self.GREEN,
+                                        font=("Segoe UI", 10, "bold"))
+        self.ready_badge.pack(side="right")
+        summaries = ctk.CTkFrame(overview, fg_color="transparent")
+        summaries.pack(fill="x", padx=22, pady=(4, 22))
+        for index in range(3):
+            summaries.columnconfigure(index, weight=1, uniform="summary")
+        self.output_summary = self._rounded_summary_card(summaries, 0, "◖", "Sortie par défaut", "Détection…", "Périphériques de lecture", "#27204f", "#aa8cff")
+        self.input_summary = self._rounded_summary_card(summaries, 1, "♩", "Entrée par défaut", "Détection…", "Périphériques d’entrée", "#12344b", "#59c8ef")
+        self.path_summary = self._rounded_summary_card(summaries, 2, "□", "Dossier des profils", Path(self.default_folder).name, self.default_folder, "#123b37", self.GREEN)
+        self.path_label = self.path_summary
+
+        actions = ctk.CTkFrame(content, fg_color="transparent")
+        actions.pack(fill="x")
+        actions.columnconfigure((0, 1), weight=1, uniform="action")
+        save_card = ctk.CTkFrame(actions, corner_radius=22, fg_color="#25214d",
+                                 border_width=1, border_color="#554d8d")
+        save_card.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        ctk.CTkLabel(save_card, text="▣", width=43, height=43, corner_radius=13,
+                     fg_color="#343153", text_color=self.FG, font=("Segoe UI Symbol", 20)).pack(anchor="w", padx=22, pady=(20, 10))
+        ctk.CTkLabel(save_card, text="Sauvegarder", font=("Segoe UI", 19, "bold"), text_color=self.FG).pack(anchor="w", padx=22)
+        ctk.CTkLabel(save_card, text="Capture les appareils, volumes et choix par application\ndans un profil réutilisable.", justify="left",
+                     font=("Segoe UI", 11), text_color=self.MUTED).pack(anchor="w", padx=22, pady=(9, 12))
+        save_row = ctk.CTkFrame(save_card, fg_color="transparent")
+        save_row.pack(fill="x", padx=22, pady=(0, 20))
+        self.profile_name = ctk.CTkEntry(save_row, height=44, corner_radius=12, fg_color="#12152b",
+                                         border_color="#444066", text_color=self.FG,
+                                         placeholder_text="Nom du profil")
+        self.profile_name.insert(0, "Mon profil audio")
+        self.profile_name.pack(side="left", fill="x", expand=True)
+        self.export_card = ctk.CTkButton(save_row, text="▣  Enregistrer", width=140, height=44,
+                                         corner_radius=12, fg_color="#8057f5", hover_color="#946fff",
+                                         font=("Segoe UI", 12, "bold"), command=self._choose_export)
+        self.export_card.pack(side="right", padx=(8, 0))
+
+        restore_card = ctk.CTkFrame(actions, corner_radius=22, fg_color="#112d40",
+                                    border_width=1, border_color="#28516b")
+        restore_card.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
+        ctk.CTkLabel(restore_card, text="◴", width=43, height=43, corner_radius=13,
+                     fg_color="#263b4d", text_color=self.FG, font=("Segoe UI Symbol", 20)).pack(anchor="w", padx=22, pady=(20, 10))
+        ctk.CTkLabel(restore_card, text="Restaurer", font=("Segoe UI", 19, "bold"), text_color=self.FG).pack(anchor="w", padx=22)
+        ctk.CTkLabel(restore_card, text="Prévisualisez et choisissez précisément les éléments\nà remettre en place.", justify="left",
+                     font=("Segoe UI", 11), text_color=self.MUTED).pack(anchor="w", padx=22, pady=(9, 12))
+        self.import_card = ctk.CTkButton(restore_card, text="↥        Importer un JSON                         ›",
+                                         height=44, corner_radius=12, fg_color="#10283a",
+                                         hover_color="#193b52", border_width=1, border_color="#39728f",
+                                         font=("Segoe UI", 12, "bold"), command=self._choose_import)
+        self.import_card.pack(fill="x", padx=22, pady=(0, 20))
+        self.action_cards = [self.export_card, self.import_card]
+
+        history_panel = ctk.CTkFrame(content, height=92, corner_radius=20, fg_color="#111727",
+                                     border_width=1, border_color="#2a354d")
+        history_panel.pack(fill="x", pady=(16, 0))
+        history_text = ctk.CTkFrame(history_panel, fg_color="transparent")
+        history_text.pack(side="left", padx=22, pady=17)
+        ctk.CTkLabel(history_text, text="P R O F I L S   &   H I S T O R I Q U E", font=("Segoe UI", 9, "bold"),
+                     text_color="#9665ff").pack(anchor="w")
+        self.history_count = ctk.CTkLabel(history_text, text="Vos sauvegardes", font=("Segoe UI", 16, "bold"), text_color=self.FG)
+        self.history_count.pack(anchor="w", pady=(4, 0))
+        self.history_link = ctk.CTkButton(history_panel, text="Ouvrir", width=76, height=38, corner_radius=11,
+                                          fg_color="#1a2338", hover_color="#26334d", border_width=1,
+                                          border_color="#34415b", command=self._show_history)
+        self.history_link.pack(side="right", padx=20)
+        self.report_link = ctk.CTkButton(history_panel, text="Rapport", width=78, height=38, corner_radius=11,
+                                         fg_color="#1a2338", hover_color="#26334d", command=self._show_report)
+        self.report_link.pack(side="right")
+        self.dependency_label = ctk.CTkLabel(history_panel, text="", text_color=self.DIM)
+        self.install_link = ctk.CTkButton(history_panel, text="Installer AudioDeviceCmdlets",
+                                          corner_radius=10, fg_color=self.YELLOW, text_color=self.BG,
+                                          command=self._install_dependencies)
+
+    def _rounded_summary_card(self, parent: ctk.CTkFrame, column: int, symbol: str, label: str,
+                              value: str, detail: str, icon_bg: str, icon_fg: str) -> ctk.CTkLabel:
+        card = ctk.CTkFrame(parent, corner_radius=16, fg_color="#0e1628",
+                            border_width=1, border_color="#29354c")
+        card.grid(row=0, column=column, sticky="nsew", padx=(0, 6) if column < 2 else (6, 0))
+        ctk.CTkLabel(card, text=symbol, width=43, height=43, corner_radius=13,
+                     fg_color=icon_bg, text_color=icon_fg, font=("Segoe UI Symbol", 19)).pack(side="left", padx=14, pady=16)
+        text = ctk.CTkFrame(card, fg_color="transparent")
+        text.pack(side="left", fill="both", expand=True, pady=13, padx=(0, 8))
+        ctk.CTkLabel(text, text=label, font=("Segoe UI", 9), text_color=self.MUTED).pack(anchor="w")
+        value_label = ctk.CTkLabel(text, text=value, font=("Segoe UI", 11, "bold"),
+                                   text_color=self.FG, anchor="w")
+        value_label.pack(fill="x", pady=(2, 0))
+        value_label.detail_label = ctk.CTkLabel(text, text=detail, font=("Segoe UI", 8),
+                                                text_color=self.DIM, anchor="w")
+        value_label.detail_label.pack(fill="x", pady=(2, 0))
+        return value_label
+
     def _refresh_overview(self) -> None:
-        self.ready_badge.config(text="●  Analyse…", fg=self.YELLOW)
+        self.ready_badge.configure(text="●  Analyse…", text_color=self.YELLOW)
         def load() -> dict[str, Any]:
             return _run_powershell(GLOBAL_EXPORT_SCRIPT)
         def done(data: dict[str, Any]) -> None:
             defaults = data.get("defaults", {})
             playback = defaults.get("playback") or {}
             recording = defaults.get("recording") or {}
-            self.output_summary.config(text=playback.get("name") or "Aucune sortie")
-            self.output_summary.detail_label.config(text=f"{len(data.get('playbackDevices', []))} sorties détectées")
-            self.input_summary.config(text=recording.get("name") or "Aucune entrée")
-            self.input_summary.detail_label.config(text=f"{len(data.get('recordingDevices', []))} entrées détectées")
-            self.history_count.config(text=f"{len(list_history())} sauvegarde(s)")
-            self.ready_badge.config(text="●  Système prêt", fg=self.GREEN)
+            self.output_summary.configure(text=playback.get("name") or "Aucune sortie")
+            self.output_summary.detail_label.configure(text=f"{len(data.get('playbackDevices', []))} sorties détectées")
+            self.input_summary.configure(text=recording.get("name") or "Aucune entrée")
+            self.input_summary.detail_label.configure(text=f"{len(data.get('recordingDevices', []))} entrées détectées")
+            self.history_count.configure(text=f"{len(list_history())} sauvegarde(s)")
+            self.ready_badge.configure(text="●  Système prêt", text_color=self.GREEN)
         self._background(load, done)
 
     def _action_card(self, parent: tk.Widget, column: int, symbol: str, accent: str, title: str, description: str, command: Callable[[], None]) -> tk.Frame:
@@ -849,8 +1026,12 @@ class AudioConfigGUI:
         self._latest_details = text
 
     def _set_status(self, text: str, color: str) -> None:
-        self.status.config(text=text, fg=color)
-        self.status_dot.config(fg=color)
+        if isinstance(self.status, ctk.CTkBaseClass):
+            self.status.configure(text=text, text_color=color)
+            self.status_dot.configure(text_color=color)
+        else:
+            self.status.config(text=text, fg=color)
+            self.status_dot.config(fg=color)
 
     def _initial_check(self) -> None:
         def done(checks: dict[str, Any]) -> None:
@@ -863,20 +1044,20 @@ class AudioConfigGUI:
             else:
                 self._set_details(f"Prêt. AudioDeviceCmdlets {checks.get('audioDeviceCmdletsVersion', '?')} détecté.\nLe moteur de routage par application est disponible.")
                 self._set_status("Prêt à sauvegarder ou restaurer", self.GREEN)
-                self.dependency_label.config(text=f"AudioDeviceCmdlets {checks.get('audioDeviceCmdletsVersion', '?')} détecté")
+                self.dependency_label.configure(text=f"AudioDeviceCmdlets {checks.get('audioDeviceCmdletsVersion', '?')} détecté")
                 self._refresh_overview()
         self._background(check_dependencies, done)
 
     def _set_cards_enabled(self, enabled: bool) -> None:
         state = "hand2" if enabled else "arrow"
         for card in self.action_cards:
-            card.config(cursor=state)
+            card.configure(cursor=state)
 
     def _choose_folder(self, _event: Any = None) -> None:
         folder = filedialog.askdirectory(title="Dossier par défaut", initialdir=self.default_folder)
         if folder:
             self.default_folder = folder
-            self.path_label.config(text=folder)
+            self.path_label.configure(text=folder)
 
     def _choose_export(self) -> None:
         profile = self.profile_name.get().strip() if hasattr(self, "profile_name") else "audio-config"
@@ -898,7 +1079,7 @@ class AudioConfigGUI:
             self._operation_error(exc)
             return
         window = tk.Toplevel(self.root)
-        window.title("Aperçu de la restauration V6")
+        window.title("Aperçu de la restauration")
         window.geometry("680x500")
         window.configure(bg=self.BG)
         window.transient(self.root)
@@ -1042,7 +1223,7 @@ class AudioConfigGUI:
         viewer = ScrolledText(window, bg="#0e172d", fg=self.FG, insertbackground=self.FG, relief=tk.FLAT, font=("Consolas", 9), padx=16, pady=16)
         viewer.pack(fill=tk.BOTH, expand=True, padx=18, pady=18)
         viewer.insert(tk.END, text)
-        viewer.config(state=tk.DISABLED)
+        viewer.configure(state=tk.DISABLED)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1059,7 +1240,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.import_file:
             print(json.dumps(import_config(args.import_file), ensure_ascii=False, indent=2))
         else:
-            root = tk.Tk()
+            root = ctk.CTk()
             AudioConfigGUI(root)
             root.mainloop()
         return 0
