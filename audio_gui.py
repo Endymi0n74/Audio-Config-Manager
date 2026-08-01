@@ -41,7 +41,8 @@ POWERSHELL = shutil.which("powershell.exe") or shutil.which("powershell")
 
 
 def _resource_dir() -> Path:
-    return Path(sys.executable if getattr(sys, "frozen", False) else __file__).resolve().parent
+    bundle_dir = getattr(sys, "_MEIPASS", None)
+    return Path(bundle_dir or __file__).resolve().parent
 
 
 if not getattr(sys, "frozen", False):
@@ -593,6 +594,12 @@ class AudioConfigGUI:
         root.geometry("1128x720")
         root.minsize(900, 620)
         root.configure(bg=self.BG)
+        icon_path = _resource_dir() / "assets" / "app-icon.ico"
+        if icon_path.is_file():
+            try:
+                root.iconbitmap(default=str(icon_path))
+            except tk.TclError:
+                pass
         self.default_folder = str(Path.home() / "Documents")
         self.last_report: dict[str, Any] | None = None
         self.action_cards: list[tk.Frame] = []

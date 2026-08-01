@@ -1,5 +1,7 @@
 # Audio Config Manager 1.0
 
+![Audio Config Manager](assets/brand-logo.png)
+
 Application Windows 11 pour sauvegarder et restaurer les périphériques audio,
 leurs volumes et les choix de sortie/entrée propres à chaque application.
 
