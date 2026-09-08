@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Audio Config Manager</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- NavigationView -->
+    <aside class="sidebar">
+      <div class="brand">
+        <img src="assets/app-icon.png" alt="" class="brand-icon" />
+        <span class="brand-name">Audio Config Manager</span>
+      </div>
+      <nav class="nav" aria-label="Navigation principale">
+        <button class="nav-item active" data-view="overview" aria-current="page">
+          <svg class="nav-ic" viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 10 4l7 6.5"/><path d="M5.5 9v6.5h9V9"/></svg>
+          <span>Vue d'ensemble</span>
+        </button>
+        <button class="nav-item" data-view="profiles">
+          <svg class="nav-ic" viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h3.2l1.6 1.8h6.2A1.5 1.5 0 0 1 17 8.3v6.2a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5z"/></svg>
+          <span>Profils</span>
+        </button>
+        <button class="nav-item" data-view="apps">
+          <svg class="nav-ic" viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 5h13"/><path d="M3.5 10h13"/><path d="M3.5 15h13"/><circle cx="7" cy="5" r="1.5" fill="currentColor" stroke="none"/><circle cx="13" cy="10" r="1.5" fill="currentColor" stroke="none"/><circle cx="9" cy="15" r="1.5" fill="currentColor" stroke="none"/></svg>
+          <span>Applications</span>
+        </button>
+        <button class="nav-item" data-view="settings">
+          <svg class="nav-ic" viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="3"/><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M15.3 4.7l-1.4 1.4M6.1 13.9l-1.4 1.4"/></svg>
+          <span>Paramètres</span>
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <span id="ready-badge" class="badge" role="status">Vérification…</span>
+      </div>
+    </aside>
+
+    <main class="content">
+      <!-- Vue d'ensemble -->
+      <div id="view-overview" class="view">
+        <header class="topbar">
+          <h1>Vue d'ensemble</h1>
+          <p class="subtitle">Périphériques par défaut et état du module audio.</p>
+        </header>
+
+        <div id="module-banner" class="module-banner hidden">
+          <svg class="module-banner-ic" viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3.2 18 17H2Z"/><path d="M10 8.2v3.4"/><path d="M10 14.6v.1"/></svg>
+          <div>
+            <b>Module AudioDeviceCmdlets manquant</b>
+            <p id="module-banner-text">L'application repose sur le module PowerShell AudioDeviceCmdlets (Microsoft), absent de cette machine. Installez-le pour activer toutes les fonctions.</p>
+          </div>
+          <button id="install-module" class="btn btn-warning" type="button">Installer le module</button>
+        </div>
+
+        <section class="summary-grid" aria-label="État audio">
+          <div class="summary-card">
+            <div class="card-head">
+              <svg class="card-ic" viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5v5h3l3.5 2.7V4.8L6.5 7.5z"/><path d="M14 6.8a3.6 3.6 0 0 1 0 6.4"/></svg>
+              <span class="summary-label">Sortie par défaut</span>
+            </div>
+            <span id="playback-summary" class="summary-value" title="">—</span>
+            <span id="playback-detail" class="summary-detail"></span>
+          </div>
+          <div class="summary-card">
+            <div class="card-head">
+              <svg class="card-ic" viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4.6a3 3 0 0 1 6 0v5a3 3 0 0 1-6 0z"/><path d="M4.8 9.6a5.2 5.2 0 0 0 10.4 0"/><path d="M10 14.8v2.7"/><path d="M7.4 17.5h5.2"/></svg>
+              <span class="summary-label">Entrée par défaut</span>
+            </div>
+            <span id="input-summary" class="summary-value" title="">—</span>
+            <span id="input-detail" class="summary-detail"></span>
+          </div>
+          <div class="summary-card">
+            <div class="card-head">
+              <svg class="card-ic" viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h3.2l1.6 1.8h6.2A1.5 1.5 0 0 1 17 8.3v6.2a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5z"/></svg>
+              <span class="summary-label">Profils</span>
+            </div>
+            <span id="profiles-count" class="summary-value">—</span>
+            <span class="summary-detail">dans le dossier de profils</span>
+          </div>
+        </section>
+
+        <section class="actions-grid" aria-label="Actions">
+          <button id="save-profile-card" class="action-card" type="button">
+            <svg class="card-ic" viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3.5V11"/><path d="M6.8 8.5 10 11.7l3.2-3.2"/><path d="M3.5 13.5v2a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-2"/></svg>
+            <span class="action-title">Sauvegarder un profil</span>
+            <span class="action-desc">Exporter la configuration audio courante (périphériques par défaut et volumes) vers un profil JSON.</span>
+            <span class="action-cta">Créer
+              <svg class="chev" viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 4.5 13 10l-5.5 5.5"/></svg>
+            </span>
+          </button>
+          <button id="go-profiles-card" class="action-card" type="button">
+            <svg class="card-ic" viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 5.5h4l1.8 2.2h7.2v8.8h-13z"/><path d="M3.5 8.5h13"/></svg>
+            <span class="action-title">Gérer les profils</span>
+            <span class="action-desc">Restaurer, importer ou supprimer des profils audio enregistrés.</span>
+            <span class="action-cta">Gérer
+              <svg class="chev" viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 4.5 13 10l-5.5 5.5"/></svg>
+            </span>
+          </button>
+        </section>
+
+        <!-- Bandeau de statut : visible uniquement pour les messages dynamiques -->
+        <section id="status-bar" class="status-bar hidden" role="status" aria-live="polite">
+          <svg class="status-ic" viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="M10 9.2v4.2"/><path d="M10 6.7v.1"/></svg>
+          <span id="status-text" class="status-text"></span>
+        </section>
+      </div>
+
+      <!-- Profils -->
+      <div id="view-profiles" class="view hidden">
+        <header class="topbar">
+          <h1>Profils audio</h1>
+          <p id="profiles-folder-label" class="subtitle"></p>
+        </header>
+
+        <section class="toolbar" aria-label="Actions sur les profils">
+          <button id="new-profile" class="btn btn-primary" type="button">Nouveau profil</button>
+          <button id="import-profile" class="btn btn-ghost" type="button">Importer</button>
+          <button id="open-folder" class="btn btn-ghost" type="button">Ouvrir le dossier</button>
+          <button id="choose-folder" class="btn btn-ghost" type="button">Changer de dossier…</button>
+        </section>
+
+        <div id="profiles-empty" class="empty-state hidden">Aucun profil dans ce dossier. Créez le premier avec « Nouveau profil ».</div>
+        <div id="profiles-list" class="profiles-list"></div>
+      </div>
+
+      <!-- Applications -->
+      <div id="view-apps" class="view hidden">
+        <header class="topbar">
+          <h1>Applications audio</h1>
+          <p class="subtitle">Routez chaque application vers le périphérique de votre choix. L'indicateur « En lecture » suit en temps réel les applications qui jouent du son.</p>
+        </header>
+
+        <section class="toolbar" aria-label="Actions">
+          <button id="apps-refresh" class="btn btn-ghost" type="button">Actualiser</button>
+        </section>
+
+        <div id="apps-banner" class="module-banner hidden">
+          <svg class="module-banner-ic" viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3.2 18 17H2Z"/><path d="M10 8.2v3.4"/><path d="M10 14.6v.1"/></svg>
+          <div>
+            <b>Routage par application indisponible</b>
+            <p id="apps-banner-text"></p>
+          </div>
+        </div>
+
+        <div id="apps-empty" class="empty-state hidden">
+          Aucune application audio active pour le moment. Lancez un lecteur, un jeu ou un navigateur qui joue du son, puis actualisez.
+        </div>
+        <div id="apps-list" class="apps-list"></div>
+      </div>
+
+      <!-- Paramètres -->
+      <div id="view-settings" class="view hidden">
+        <header class="topbar">
+          <h1>Paramètres</h1>
+          <p class="subtitle">Dossier des profils et comportement des sauvegardes automatiques.</p>
+        </header>
+
+        <section class="settings-card">
+          <div class="setting-row">
+            <div class="setting-label">
+              <b>Dossier des profils</b>
+              <span class="setting-hint">Emplacement où sont enregistrés les profils audio.</span>
+            </div>
+            <div class="setting-control folder-control">
+              <input id="profiles-folder-input" type="text" readonly spellcheck="false" />
+              <button id="pick-folder" class="btn btn-ghost" type="button">Choisir…</button>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-label">
+              <b>Sauvegarde avant restauration</b>
+              <span class="setting-hint">Crée un profil horodaté « Avant restauration … » dans le dossier de profils.</span>
+            </div>
+            <label class="switch">
+              <input id="backup-before-restore" type="checkbox" />
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-label">
+              <b>Sauvegarde au démarrage</b>
+              <span class="setting-hint">Exporte automatiquement la configuration à l'ouverture de l'application.</span>
+            </div>
+            <label class="switch">
+              <input id="auto-save-on-start" type="checkbox" />
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-label">
+              <b>Veille sur les périphériques</b>
+              <span class="setting-hint">Détecte un changement de périphérique par défaut et sauvegarde une version.</span>
+            </div>
+            <label class="switch">
+              <input id="watch-devices" type="checkbox" />
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-label">
+              <b>Versions à conserver</b>
+              <span class="setting-hint">Nombre maximal de sauvegardes horodatées gardées dans le dossier (0 = tout conserver).</span>
+            </div>
+            <div class="setting-control">
+              <input id="keep-versions" class="number-input" type="number" min="0" max="999" />
+            </div>
+          </div>
+
+          <div class="settings-actions">
+            <button id="save-settings" class="btn btn-primary" type="button">Enregistrer</button>
+            <span id="settings-status" class="settings-status"></span>
+          </div>
+        </section>
+
+        <section class="about" aria-label="À propos">
+          <b>Audio Config Manager</b> · Version 1.1.0
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- Aperçu avant restauration -->
+  <div id="preview-modal" class="modal-overlay hidden">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="preview-title">
+      <h2 id="preview-title">Restaurer ce profil ?</h2>
+      <p id="preview-file" class="modal-subtitle"></p>
+      <div id="preview-content" class="preview-content"></div>
+      <p class="modal-meta">La restauration applique les périphériques par défaut et les volumes enregistrés.</p>
+      <div class="modal-actions">
+        <button id="preview-cancel" class="btn btn-ghost" type="button">Annuler</button>
+        <button id="preview-confirm" class="btn btn-primary" type="button">Restaurer ce profil</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirmation de suppression -->
+  <div id="confirm-modal" class="modal-overlay hidden">
+    <div class="modal modal-small" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+      <h2 id="confirm-title">Supprimer ce profil ?</h2>
+      <p id="confirm-file" class="modal-subtitle"></p>
+      <p class="modal-meta">Cette action est définitive et ne peut pas être annulée.</p>
+      <div class="modal-actions">
+        <button id="confirm-cancel" class="btn btn-ghost" type="button">Annuler</button>
+        <button id="confirm-ok" class="btn btn-danger" type="button">Supprimer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toasts -->
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <script src="main.js"></script>
+</body>
+</html>

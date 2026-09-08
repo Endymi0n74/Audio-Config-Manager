@@ -12,23 +12,32 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-node@v4
         with:
-          python-version: '3.12'
-          cache: pip
-      - run: python -m pip install -r requirements.txt
-      - run: python -m unittest -v test_audio_gui.py
-      - run: >-
-          python -m PyInstaller --noconfirm --clean --onefile --windowed
-          --name "Audio Config Manager"
-          --icon "assets/app-icon.ico"
-          --add-data "assets/app-icon.ico;assets"
-          --collect-all winappaudiorouter
-          --collect-all pycaw
-          --collect-all comtypes
-          --collect-all customtkinter
-          audio_gui.py
+          node-version: 20
+          cache: npm
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+
+      - run: npm install
+
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Build Tauri app (release)
+        run: powershell -ExecutionPolicy Bypass -File build-release.ps1
+
       - uses: actions/upload-artifact@v4
         with:
           name: Audio-Config-Manager-Windows
-          path: dist/Audio Config Manager.exe
+          path: dist

@@ -1,9 +1,12 @@
+# Rust / Tauri
+node_modules/
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# Python legacy
 __pycache__/
 *.py[cod]
 .venv/
 build/
 dist/
-*.spec
-*.json
-!examples/*.json
-
+*.spec

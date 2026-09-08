@@ -1,0 +1,38 @@
+[package]
+name = "audio-config-manager"
+version = "1.1.0"
+description = "Sauvegarde et restauration de la configuration audio Windows"
+authors = ["Endymi0n74"]
+edition = "2021"
+rust-version = "1.75"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+window-vibrancy = "0.6.0"
+
+# custom-protocol = feature Tauri qui EMBARQUE le frontend dans l'exe.
+# En default : tout `cargo build` (debug/release/test) embarque le frontend,
+# donc plus d'ecran ERR_CONNECTION_REFUSED possible. `tauri dev` retire ce
+# feature automatiquement (--no-default-features) pour charger le serveur de
+# dev ; `tauri build` l'ajoute explicitement. Le test Rust
+# `frontend_is_embedded_via_custom_protocol` (main.rs) garde l'anti-regression.
+[features]
+default = ["tauri/custom-protocol"]
+
+[[bin]]
+name = "audio-config-manager"
+path = "src/main.rs"
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
