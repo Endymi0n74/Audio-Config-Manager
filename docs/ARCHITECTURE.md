@@ -31,13 +31,11 @@
 └─────────────────────────────────────────────────────────────┘
 ```
 
-L'application est **Windows uniquement**, exactement comme l'originale :
-le moteur audio *système* (défauts, volumes, listes) est PowerShell +
-le module AudioDeviceCmdlets de Microsoft. Le **routage par
-application** — qui n'existait pas dans la version PowerShell — est en
-Rust pur, via l'API interne de Windows (`AudioPolicyConfig`), comme dans
-l'application Python d'origine (qui passait par le module
-`winappaudiorouter`).
+L'application est **Windows uniquement** : le moteur audio *système*
+(défauts, volumes, listes) est PowerShell + le module AudioDeviceCmdlets
+de Microsoft. Le **routage par application** — que le module ne couvre
+pas — est en Rust pur, via l'API interne de Windows (`AudioPolicyConfig`),
+le même mécanisme qu'EarTrumpet ou SoundVolumeView.
 
 ## Le moteur PowerShell (`ps.rs` + `audio-config-manager.ps1`)
 
@@ -69,9 +67,8 @@ l'original : « PowerShell indisponible », « Réponse audio invalide »,
 
 ## Routage par application (`app_routing.rs`)
 
-Le pendant exact de la fonctionnalité « par application » de
-l'application Python d'origine (Xbox → une autre carte son, etc.),
-implanté en **Rust pur** — aucun crate Windows externe : FFI direct sur
+Le routage « Xbox → une autre carte son », implanté en **Rust pur** —
+aucun crate Windows externe : FFI direct sur
 `combase`/`ole32`/`kernel32`, comme `appearance.rs`.
 
 L'API utilisée est l'interface interne **`Windows.Media.Internal.
@@ -196,19 +193,17 @@ défaut changent, une sauvegarde horodatée est créée et les événements
 | dossier « Audio Profiles » + profils JSON | `profiles.rs` |
 | `%Y-%m-%d %H-%M-%S` pour les sauvegardes | `timestamp()` dans `commands.rs` |
 | module AudioDeviceCmdlets + installation | `install_audio_module` |
-| routage par application (Python, `winappaudiorouter`) | `app_routing.rs` (Rust pur, `AudioPolicyConfig`) |
-| Tkinter (`audio_gui.py`)                | `src/index.html` + `style.css` + `main.js` |
+| routage par application | `app_routing.rs` (Rust pur, `AudioPolicyConfig`) |
+| interface graphique | `src/index.html` + `style.css` + `main.js` |
 
 ## État du routage par application
 
-Implanté et testé (28 tests `cargo`, dont un test matériel `--ignored`
+Implanté et testé (suite `cargo test`, dont un test matériel `--ignored`
 qui fait l'aller-retour complet activation → session → set → get →
 clear). La **persistance de la route** peut être refusée par le système
-en session distante (0x80070032) — vérifié par deux implémentations
-indépendantes (Rust et un probe Python miroir de winappaudiorouter),
-donc le comportement est celui de l'OS, pas un défaut d'ABI. Le test
-matériel le considère comme un SKIP dans ce cas et s'exécute
-pleinement en session locale.
+en session distante (0x80070032) — le comportement vient de l'OS, pas
+d'un défaut d'ABI. Le test matériel le considère comme un SKIP dans ce
+cas et s'exécute pleinement en session locale.
 
 La section « applications » est exportée, prévisualisée et restaurée
 avec les profils, et une **vue de gestion dédiée** (navigation
@@ -216,8 +211,7 @@ avec les profils, et une **vue de gestion dédiée** (navigation
 de périphérique (sortie/entrée) par application : le changement écrit
 directement la route persistée via `set_app_route` (PID + flux +
 périphérique, ou `null` pour revenir au périphérique système), sans
-passer par un profil. C'est l'équivalent exact de la fonction
-« par application » de l'application Python d'origine.
+passer par un profil.
 
 ## CLI de débogage (sous-commande `route` du binaire principal)
 

@@ -43,8 +43,8 @@ lu par `preview`/`restore` — identique à l'application de référence
   (périphérique désactivé entre-temps) — ce n'est pas une erreur.
 - **`DefaultPlayback` / `DefaultRecording`** — les périphériques par
   défaut du système, avec leur volume.
-- **`applications`** — section **optionnelle** ajoutée par ce projet
-  (mêmes champs que l'application Python d'origine) : le routage
+- **`applications`** — section **optionnelle** ajoutée par ce projet :
+  le routage
   persisté de chaque application détectée. Une entrée possède le nom du
   processus (`processName`), son chemin d'exécutable (`executablePath`),
   et ses routes `output` / `input` (chacune : `deviceId` + `deviceName`

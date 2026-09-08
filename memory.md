@@ -4,7 +4,7 @@ Persistent knowledge about this repo. Keep this up to date when you learn someth
 
 ## What this app is
 
-A Windows-only desktop app for managing audio device configuration (default playback/recording devices, volumes, and **per-application audio routing** — e.g. "Xbox → another sound card"). Rebuilt as **Tauri 2 + Rust + vanilla HTML/CSS/JS** from an original **Python/Tkinter** app (`audio_gui.py`, still in the repo root as the reference). No JS bundler — the frontend uses Tauri's `withGlobalTauri` (`window.__TAURI__`) so ES `import`s from `@tauri-apps/api` are NOT available.
+A Windows-only desktop app for managing audio device configuration (default playback/recording devices, volumes, and **per-application audio routing** — e.g. "Xbox → another sound card"). Built as **Tauri 2 + Rust + vanilla HTML/CSS/JS**. No JS bundler — the frontend uses Tauri's `withGlobalTauri` (`window.__TAURI__`) so ES `import`s from `@tauri-apps/api` are NOT available.
 
 ## Layout
 
@@ -14,7 +14,7 @@ A Windows-only desktop app for managing audio device configuration (default play
   - `src/commands.rs` — every `#[tauri::command]` (the IPC surface).
   - `src/app_routing.rs` — **per-application routing engine**, pure Rust FFI. The crown jewel.
   - `src/appearance.rs` — Mica backdrop + system accent color (pure FFI).
-  - `src/ps.rs` — runs the embedded PowerShell engine (60 s timeout; 10 min for module install). Every spawn uses **`CREATE_NO_WINDOW`** (`hide_console`): the app is GUI-subsystem, so without it each `powershell.exe` child flashes its own console window (the original Python app used `subprocess.CREATE_NO_WINDOW`; don't lose it again).
+  - `src/ps.rs` — runs the embedded PowerShell engine (60 s timeout; 10 min for module install). Every spawn uses **`CREATE_NO_WINDOW`** (`hide_console`): the app is GUI-subsystem, so without it each `powershell.exe` child flashes its own console window — don't lose it.
   - `src/settings.rs`, `src/profiles.rs` — settings JSON + profile listing/retention.
   - `src/route_cli.rs` — **CLI debug subcommand** of the main exe: `Audio Config Manager.exe route sessions|devices|get|set` (was `src/bin/route.rs` / `route.exe`; merged so `dist/` ships ONE exe). Reuses `app_routing` directly. Since the exe is GUI-subsystem, `attach_console()` (AttachConsole parent / AllocConsole, then CONOUT$/CONIN$ redirection; skips if a valid std handle was inherited) must run before any print.
   - `audio-config-manager.ps1` — embedded PowerShell script (`overview|export|preview|restore|devices` actions).
@@ -36,7 +36,7 @@ Tauri v2 converts Rust `snake_case` args to `camelCase` on the JS side (e.g. `de
 
 This is the hard-won reverse-engineering. Do not "simplify" it away.
 
-- Uses Windows' internal **`Windows.Media.Internal.AudioPolicyConfig`** (implemented in `AudioSes.dll`) — the same path as EarTrumpet / SoundVolumeView / winappaudiorouter (which the original Python app used).
+- Uses Windows' internal **`Windows.Media.Internal.AudioPolicyConfig`** (implemented in `AudioSes.dll`) — the same path as EarTrumpet / SoundVolumeView / winappaudiorouter.
 - Factory interface IID `ab3d4648-e242-459f-b02f-541c70306324` (Win11 ≥ 21H2), downlevel `2a59116d-6c4f-45e0-a74f-707e3fef9258`.
 - Vtable slots: **25** = `SetPersistedDefaultAudioEndpoint(pid, dataFlow, role, HSTRING)`, **26** = `Get…` (out HSTRING). Get returns `0x80070490` (ERROR_NOT_FOUND) when the app has no persisted route → follows the system default.
 - Device IDs are **packed**: `\\?\SWD#MMDEVAPI#{id}#{interface-guid}` (render suffix `#{e6327cad-dcec-4949-ae8a-991e976a79d2}`, capture `#{2eef81be-33fa-4800-9670-1cd474972c3f}`). `pack_device_id`/`unpack_device_id` handle this.
@@ -123,5 +123,5 @@ Valeurs utiles : `eRender=0 / eCapture=1` ; rôles `eConsole=0 / eMultimedia=1` 
 ## Version / misc
 
 - Cargo package + app version: **1.1.0**.
-- Reference original binary: `D:\0day\Audio Config Manager.exe` (the user's v3.1-era exe — reference only, do not delete). Original source `audio_gui.py` in the repo root.
-- The Tauri rewrite is committed to git (repo `Endymi0n74/Audio_config_manager_Windows`, branch `main`) and released as tag **v1.1.0**; the GitHub Actions workflow (`.github/workflows/build.yml`) builds on every push/PR and publishes the exe to a GitHub Release on `v*` tags.
+- Reference original binary: `D:\0day\Audio Config Manager.exe` (the user's v3.1-era exe — reference only, do not delete).
+- The app is committed to git (repo `Endymi0n74/Audio-Config-Manager`, branch `main`) and released as tag **v1.0.0**; the GitHub Actions workflow (`.github/workflows/build.yml`) builds on every push/PR and publishes the exe to a GitHub Release on `v*` tags. Screenshots for the README live in `docs/screens/`.

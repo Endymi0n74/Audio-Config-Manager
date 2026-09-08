@@ -2,8 +2,7 @@
 //! Rust pur, via l'API interne de Windows :
 //! `Windows.Media.Internal.AudioPolicyConfig` (implémentée dans
 //! `AudioSes.dll`) — le même chemin que EarTrumpet / SoundVolumeView /
-//! winappaudiorouter (l'application Python d'origine l'utilisait via ce
-//! dernier module).
+//! winappaudiorouter.
 //!
 //! Contrat reconstitué et vérifié sur cette machine (Win11, build 29648) :
 //! - la fabrique de classe expose l'interface `IAudioPolicyConfigFactory`
@@ -34,9 +33,8 @@ use std::sync::mpsc;
 use std::sync::OnceLock;
 
 // ---------------------------------------------------------------------------
-// Types du profil JSON — section « applications » (mêmes champs que
-// l'application Python d'origine : processName / executablePath / output /
-// input → { deviceId, deviceName }).
+// Types du profil JSON — section « applications » (processName /
+// executablePath / output / input → { deviceId, deviceName }).
 // ---------------------------------------------------------------------------
 
 /// Cible d'un flux (sortie ou entrée) pour une application.
@@ -1021,7 +1019,7 @@ fn paths_equal(a: &str, b: &str) -> bool {
 }
 
 /// L'application correspond-elle à un processus en cours ? (chemin d'abord,
-/// puis nom — comme l'application Python d'origine.)
+/// puis nom — pour retrouver les processus en cours.)
 fn match_processes(entry: &ApplicationEntry, running: &[ProcInfo]) -> (Vec<ProcInfo>, &'static str) {
     if let Some(saved_path) = &entry.executable_path {
         let exact: Vec<ProcInfo> = running
