@@ -124,4 +124,4 @@ Valeurs utiles : `eRender=0 / eCapture=1` ; rôles `eConsole=0 / eMultimedia=1` 
 
 - Cargo package + app version: **1.1.0**.
 - Reference original binary: `D:\0day\Audio Config Manager.exe` (the user's v3.1-era exe — reference only, do not delete). Original source `audio_gui.py` in the repo root.
-- Nothing is committed to git for the Tauri rewrite yet (git status shows large untracked trees: `src/`, `src-tauri/`, `docs/`, `e2e/`).
+- The Tauri rewrite is committed to git (repo `Endymi0n74/Audio_config_manager_Windows`, branch `main`) and released as tag **v1.1.0**; the GitHub Actions workflow (`.github/workflows/build.yml`) builds on every push/PR and publishes the exe to a GitHub Release on `v*` tags.
