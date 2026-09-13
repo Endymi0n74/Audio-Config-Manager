@@ -229,7 +229,9 @@ pub async fn save_profile(app: tauri::AppHandle) -> Result<SaveProfileResult, St
 /// Énumération COM directe (`IMMDeviceEnumerator` + nom convivial via
 /// `PKEY_Device_FriendlyName`, voir `app_routing::active_devices`) : plus
 /// aucun lancement PowerShell pour lister les périphériques.
-fn current_devices() -> (Vec<(String, String)>, Vec<(String, String)>) {
+type DeviceList = Vec<(String, String)>;
+
+fn current_devices() -> (DeviceList, DeviceList) {
     (
         app_routing::active_devices(Flow::Output),
         app_routing::active_devices(Flow::Input),
@@ -637,7 +639,7 @@ mod tests {
     #[test]
     fn restore_message_appends_missing_count() {
         let mut message = "Configuration restaurée".to_string();
-        let missing = vec!["Ancien casque".to_string()];
+        let missing = ["Ancien casque".to_string()];
         message.push_str(&format!(" · {} périphérique(s) absent(s)", missing.len()));
         assert_eq!(message, "Configuration restaurée · 1 périphérique(s) absent(s)");
     }

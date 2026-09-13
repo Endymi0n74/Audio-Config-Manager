@@ -61,6 +61,9 @@ struct WaveFormatEx {
 #[link(name = "ole32")]
 unsafe extern "system" {
     fn CoInitializeEx(reserved: *mut c_void, coinit: u32) -> i32;
+    /// Déclaré pour compléter la paire COM : le flux tourne jusqu'au kill
+    /// du processus, la libération de l'appartement n'est jamais atteinte.
+    #[expect(dead_code)]
     fn CoUninitialize();
     fn CoCreateInstance(
         rclsid: *const Guid,
@@ -203,11 +206,11 @@ fn main() {
             if unsafe { get_buffer(render_client, available, &mut data) } >= 0 && !data.is_null() {
                 let samples = (available as usize) * 2;
                 let buf = unsafe { std::slice::from_raw_parts_mut(data, samples) };
-                for i in 0..samples {
+                for (i, byte) in buf.iter_mut().enumerate() {
                     // Amplitude très faible (100 / 32767) — inaudible.
                     let t = (i as f64) / 2.0;
                     let v = (100.0 * (2.0 * std::f64::consts::PI * 220.0 * t / 44100.0 + phase)).sin();
-                    buf[i] = (v as i16).to_le_bytes()[0];
+                    *byte = (v as i16).to_le_bytes()[0];
                 }
                 phase += 0.01;
                 // SAFETY : libération du tampon rempli.

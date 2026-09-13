@@ -126,10 +126,6 @@ const IID_IAUDIO_SESSION_MANAGER_2: Guid =
     guid(0x77aa99a0, 0x1bd6, 0x484f, [0x8b, 0xc7, 0x2c, 0x65, 0x4c, 0x9a, 0x9b, 0x6f]);
 const IID_IAUDIO_SESSION_CONTROL_2: Guid =
     guid(0xbfb7ff88, 0x7239, 0x4fc9, [0x8f, 0xa2, 0x07, 0xc9, 0x50, 0xbe, 0x9c, 0x6d]);
-/// IPropertyStore (nom convivial des périphériques).
-const IID_IPROPERTY_STORE: Guid =
-    guid(0x886d8eeb, 0x8cf2, 0x4446, [0x8d, 0x02, 0xcd, 0xba, 0x1d, 0xbd, 0xcf, 0x99]);
-
 /// PKEY_Device_FriendlyName (nom affiché dans le panneau Son de Windows).
 const PKEY_DEVICE_FRIENDLY_NAME: PropertyKey = PropertyKey {
     fmtid: guid(0xa45c254e, 0xdf1c, 0x4efd, [0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0]),
@@ -323,7 +319,11 @@ impl HString {
         self.0
     }
 
-    fn to_string(&self) -> String {
+    /// Lit la chaîne Windows native en `String` Rust (UTF-16 → UTF-8).
+    ///
+    /// Nommé `decode` (et non `to_string`) pour ne pas masquer `ToString`,
+    /// ce que clippy interdit.
+    fn decode(&self) -> String {
         if self.0.is_null() {
             return String::new();
         }
@@ -481,7 +481,7 @@ impl PolicyConfig {
         if out.is_null() {
             return Ok(None);
         }
-        let packed = HString::from_raw(out).to_string();
+        let packed = HString::from_raw(out).decode();
         Ok(unpack_device_id(&packed))
     }
 }
@@ -747,6 +747,7 @@ fn list_session_pids_noinit(flow: Flow) -> Result<Vec<u32>, String> {
 /// Identifiants (non emballés) des périphériques d'un flux selon le masque
 /// d'état (DEVICE_STATE_ACTIVE, ou DEVICE_STATE_ALL = 0xF pour inclure les
 /// périphériques désactivés/débranchés).
+#[cfg(test)] // utilisé seulement par les tests de bout en bout
 fn list_device_ids_by_state(flow: Flow, state_mask: u32) -> Vec<String> {
     type EnumAudioEndpointsFn = unsafe extern "system" fn(
         *mut std::ffi::c_void,
@@ -824,6 +825,7 @@ fn list_device_ids_by_state(flow: Flow, state_mask: u32) -> Vec<String> {
 
 /// Identifiants (non emballés) des périphériques actifs d'un flux — utilisé
 /// par les tests de bout en bout pour choisir une cible de routage.
+#[cfg(test)]
 fn list_device_ids_noinit(flow: Flow) -> Vec<String> {
     list_device_ids_by_state(flow, DEVICE_STATE_ACTIVE)
 }

@@ -151,7 +151,9 @@ pub fn run(args: &[String]) -> i32 {
 }
 
 /// Vérifie le moteur et récupère sessions + périphériques en une fois.
-fn collect() -> Result<(Vec<AppSessionRow>, Vec<(String, String)>, Vec<(String, String)>), String> {
+type DeviceList = Vec<(String, String)>;
+
+fn collect() -> Result<(Vec<AppSessionRow>, DeviceList, DeviceList), String> {
     if !routing_available() {
         return Err("Routage par application indisponible sur ce système.".to_string());
     }
@@ -187,7 +189,7 @@ fn cmd_sessions() -> i32 {
         println!("Aucune application audio active. Lancez un lecteur puis réessayez.");
         return 0;
     }
-    println!("{:<8}{:<5}{:<26}{:<44}{}", "PID", "LECT", "PROCESSUS", "SORTIE", "ENTRÉE");
+    println!("{:<8}{:<5}{:<26}{:<44}ENTRÉE", "PID", "LECT", "PROCESSUS", "SORTIE");
     for session in &sessions {
         println!(
             "{:<8}{:<5}{:<26}{:<44}{}",
