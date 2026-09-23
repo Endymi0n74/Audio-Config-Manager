@@ -1,6 +1,6 @@
 [package]
 name = "audio-config-manager"
-version = "1.1.0"
+version = "1.2.0"
 description = "Sauvegarde et restauration de la configuration audio Windows"
 authors = ["Endymi0n74"]
 edition = "2021"
