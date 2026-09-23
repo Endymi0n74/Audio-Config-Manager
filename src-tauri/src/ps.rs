@@ -11,6 +11,7 @@ use serde_json::Value;
 use std::io::Read;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use crate::settings::ERR_CONFIG_DIR;
@@ -55,6 +56,23 @@ const PS_EXE: &str = "powershell.exe";
 /// doublement encodés.
 pub fn ensure_script(config_dir: &Path) -> Result<std::path::PathBuf, String> {
     let script_path = config_dir.join(SCRIPT_FILENAME);
+
+    // Cache : `ready()` (chaque commande) et la veille watchDevices (toutes
+    // les 10 s) rappellent cette fonction — une fois le script vérifié/écrit,
+    // on ne plus relire+recomparer tout le fichier, une simple existence
+    // suffit. Le contenu embarqué étant constant dans un processus, la
+    // comparaison complète n'est utile qu'au premier appel (ou si le fichier
+    // a été supprimé). Une optique de réécriture à chaque appel reviendrait
+    // à écraser les éditions de l'utilisateur à chaque commande.
+    static ENSURED: Mutex<Option<std::path::PathBuf>> = Mutex::new(None);
+    let cached = ENSURED
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone();
+    if cached.as_deref() == Some(script_path.as_path()) && script_path.is_file() {
+        return Ok(script_path);
+    }
+
     let embedded = include_str!("../audio-config-manager.ps1");
     let expected = format!("\u{feff}{embedded}");
     match std::fs::read_to_string(&script_path) {
@@ -66,6 +84,9 @@ pub fn ensure_script(config_dir: &Path) -> Result<std::path::PathBuf, String> {
                 .map_err(|e| format!("Écriture du script impossible : {e}"))?;
         }
     }
+    *ENSURED
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(script_path.clone());
     Ok(script_path)
 }
 
@@ -165,16 +186,16 @@ pub fn run_script(
 /// aussi imprimer les objets périphériques par `Set-AudioDevice` avant la
 /// réponse finale, il faut donc ignorer tout ce qui précède.
 fn parse_json_output(stdout: &str) -> Result<Value, String> {
-    let mut last: Option<Value> = None;
-    for line in stdout.lines() {
+    // Depuis la fin : la réponse finale est la dernière ligne JSON imprimée
+    // (restore fait précéder la réponse d'objets périphériques non JSON) —
+    // on s'arrête à la première occurrence au lieu de parser tout le début.
+    for line in stdout.lines().rev() {
         if let Ok(value) = serde_json::from_str::<Value>(line.trim()) {
-            last = Some(value);
+            return Ok(value);
         }
     }
-    last.ok_or_else(|| {
-        let preview: String = stdout.chars().take(200).collect();
-        format!("Réponse audio invalide : {preview}")
-    })
+    let preview: String = stdout.chars().take(200).collect();
+    Err(format!("Réponse audio invalide : {preview}"))
 }
 
 /// Installe le module AudioDeviceCmdlets (fournisseur NuGet + PSGallery),

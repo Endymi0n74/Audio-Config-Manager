@@ -132,7 +132,7 @@ Notes:
 ## Golden rules for editing
 
 - Match existing conventions; verify a library is already used before adding one. Prefer raw FFI here — the project deliberately avoids pulling WASAPI crates.
-- When touching `app_routing.rs`: every policy/COM op must run through `with_apartment`, and remember the double-`Result` flattening (`with_apartment(move || { ... Ok(..) })?`).
+- When touching `src/app_routing/`: every policy/COM op must run through `with_apartment`, and remember the double-`Result` flattening (`with_apartment(move || { ... Ok(..) })?`).
 - Frontend commands: `invoke("name", { camelCaseArgs })`.
 - After editing: `cargo test` + `node --check src/main.js`, then rebuild + redeploy + live-verify, then clean up scratch files.
 - **Never** run `git commit`/`push` unless explicitly asked. Leave changes uncommitted otherwise.

@@ -20,8 +20,10 @@
 │  settings.rs     → paramètres (profilesFolder, backupBefore… )  │
 │  profiles.rs     → liste/noms uniques/rétention des profils     │
 │  ps.rs           → moteur PowerShell (script embarqué)          │
-│  app_routing.rs  → routage audio PAR APPLICATION (Rust pur,     │
+│  app_routing/    → routage audio PAR APPLICATION (Rust pur,     │
 │                    API interne Windows AudioPolicyConfig)       │
+│                    sous-modules : ffi · devices · sessions ·     │
+│                    profile_apps                                  │
 │  appearance.rs   → Mica/arrière-plan + couleur d'accent système │
 │                                                                 │
 │  audio-config-manager.ps1  → script PS embarqué dans la binaire│
@@ -64,7 +66,15 @@ l'analyse de la réponse JSON. Les messages d'erreur reprennent ceux de
 l'original : « PowerShell indisponible », « Réponse audio invalide »,
 « Le module AudioDeviceCmdlets n'est pas installé », etc.
 
-## Routage par application (`app_routing.rs`)
+## Routage par application (`app_routing/`)
+
+Le module est découpé en 4 sous-modules : `ffi.rs` (GUID, HSTRING, COM brut,
+thread d'appartement STA, fabrique AudioPolicyConfig), `devices.rs`
+(énumération WASAPI, IDs emballés, noms conviviaux), `sessions.rs`
+(sessions audio actives) et `profile_apps.rs` (section « applications » du
+profil, export/aperçu/restauration, vue Applications). L'API publique est
+re-exportée depuis `app_routing/mod.rs` (inchangée pour `commands.rs` et la
+CLI `route`).
 
 Le routage « Xbox → une autre carte son », implanté en **Rust pur** —
 aucun crate Windows externe : FFI direct sur
@@ -192,7 +202,7 @@ défaut changent, une sauvegarde horodatée est créée et les événements
 | dossier « Audio Profiles » + profils JSON | `profiles.rs` |
 | `%Y-%m-%d %H-%M-%S` pour les sauvegardes | `timestamp()` dans `commands.rs` |
 | module AudioDeviceCmdlets + installation | `install_audio_module` |
-| routage par application | `app_routing.rs` (Rust pur, `AudioPolicyConfig`) |
+| routage par application | `app_routing/` (Rust pur, `AudioPolicyConfig`) |
 | interface graphique | `src/index.html` + `style.css` + `main.js` |
 
 ## État du routage par application
@@ -240,7 +250,7 @@ petit binaire Rust qui ouvre une vraie session WASAPI de rendu (léger
 bourdonnement inaudible) et apparaît donc comme une application audio
 active. Il n'est pas copié dans `dist/` (outil de test, non distribué).
 
-- **Test Rust** `e2e_apps_view_set_clear_missing` (dans `app_routing.rs`,
+- **Test Rust** `e2e_apps_view_set_clear_missing` (dans `app_routing/mod.rs`,
   marqué `#[ignore]`, « test matériel ») : lance fakeaudio, vérifie que sa
   session apparaît, puis **set** (route écrite et relue), **clear** (route
   effacée) et l'état **introuvable** — soit une route vers un périphérique

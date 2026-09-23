@@ -63,7 +63,7 @@ Les volumes sont appliqués via `Set-AudioDevice -Volume`, les défauts
 via `Set-AudioDevice -DefaultOnly`.
 
 Les routes par application sont restaurées par le moteur Rust
-(`app_routing.rs`, API interne `AudioPolicyConfig`) : chaque application
+(`app_routing/`, API interne `AudioPolicyConfig`) : chaque application
 est retrouvée parmi les **processus en cours** (chemin d'exécutable
 d'abord, nom ensuite), puis ses routes persistées sont réécrites pour
 chaque flux. Une application qui ne tourne pas, ou dont le périphérique

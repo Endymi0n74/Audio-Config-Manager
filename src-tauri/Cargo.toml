@@ -33,6 +33,7 @@ path = "src/main.rs"
 [profile.release]
 panic = "abort"
 codegen-units = 1
-lto = true
+# "thin" au lieu de fat : ~2x plus rapide à linker, ~1 % de taille en plus.
+lto = "thin"
 opt-level = "s"
 strip = true

@@ -12,7 +12,7 @@ A Windows-only desktop app for managing audio device configuration (default play
 - `src-tauri/` — Rust backend.
   - `src/main.rs` — entry point; registers all commands; Mica setup; `watchDevices` thread (polls `overview` every **10 s**, was 3 s — saved profiles on default-device change).
   - `src/commands.rs` — every `#[tauri::command]` (the IPC surface).
-  - `src/app_routing.rs` — **per-application routing engine**, pure Rust FFI. The crown jewel.
+  - `src/app_routing/` — **per-application routing engine**, pure Rust FFI, split into 4 sub-modules (`mod.rs` keeps the public API + Flow/parse_flow + tests): `ffi.rs` (GUID/HSTRING/COM/apartment thread/AudioPolicyConfig factory), `devices.rs` (WASAPI enumeration + packed IDs + friendly names), `sessions.rs` (active audio sessions), `profile_apps.rs` (profile section + export/preview/restore + Apps view). The crown jewel.
   - `src/appearance.rs` — Mica backdrop + system accent color (pure FFI).
   - `src/ps.rs` — runs the embedded PowerShell engine (60 s timeout; 10 min for module install). Every spawn uses **`CREATE_NO_WINDOW`** (`hide_console`): the app is GUI-subsystem, so without it each `powershell.exe` child flashes its own console window — don't lose it.
   - `src/settings.rs`, `src/profiles.rs` — settings JSON + profile listing/retention.
@@ -32,7 +32,7 @@ Tauri v2 converts Rust `snake_case` args to `camelCase` on the JS side (e.g. `de
 
 `Metadata` (ComputerName, Timestamp ISO-8601, Version "3.1") · `PlaybackDevices`/`RecordingDevices` (ID, Name, Volume|null) · `DefaultPlayback`/`DefaultRecording` · **`applications`** (added by Rust at export; optional): array of `{ processName, executablePath?, output?: {deviceId, deviceName?}, input?: {deviceId, deviceName?} }`. PowerShell writes the file with a UTF-8 **BOM** — all Rust readers strip it. A profile without `applications` is still valid (v3.1-compatible).
 
-## Per-application routing engine (`app_routing.rs`) — key facts
+## Per-application routing engine (`app_routing/`) — key facts
 
 This is the hard-won reverse-engineering. Do not "simplify" it away.
 
@@ -47,7 +47,7 @@ This is the hard-won reverse-engineering. Do not "simplify" it away.
 - **COM init gotcha (bit us in the CLI):** `CoCreateInstance` on a thread with no initialized COM apartment returns empty lists. Always go through `with_apartment` (that's what `active_devices()` and the `app_sessions` command do).
 - **RDP/remote limitation:** `Set` was once refused with `0x80070032` (ERROR_NOT_SUPPORTED) on this machine during early RDP testing, but it has since worked repeatedly here — treat it as session-dependent, not a bug. The refusal you're most likely to actually hit is **off-list device ids → `0x80070057` (E_INVALIDARG)** (see Testing section).
 
-## WASAPI / AudioPolicyConfig vtable map (slots used in `app_routing.rs`)
+## WASAPI / AudioPolicyConfig vtable map (slots used in `app_routing/`)
 
 All COM interfaces start with `IUnknown` at slots 0-2 (`QueryInterface`, `AddRef`, `Release`). Numbers below are the exact vtable indices used in the code and **verified empirically** on this machine:
 
@@ -123,5 +123,6 @@ Valeurs utiles : `eRender=0 / eCapture=1` ; rôles `eConsole=0 / eMultimedia=1` 
 ## Version / misc
 
 - Cargo package + app version: **1.2.0**.
+- Release profile: `lto = "thin"` (was fat `true`) + `codegen-units = 1` + `opt-level = "s"` + `strip = true` — full release build ≈ 3m48 on this machine, exe ≈ 4.98 MB (thin LTO is ~2x faster to link, ~1-4 % bigger than fat LTO).
 - Reference original binary: `D:\0day\Audio Config Manager.exe` (the user's v3.1-era exe — reference only, do not delete).
 - The app is committed to git (repo `Endymi0n74/Audio-Config-Manager`, branch `main`) and released as tag **v1.0.0**; the GitHub Actions workflow (`.github/workflows/build.yml`) builds on every push/PR and publishes the exe to a GitHub Release on `v*` tags. Screenshots for the README live in `docs/screens/`.

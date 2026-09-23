@@ -239,8 +239,13 @@ fn current_devices() -> (DeviceList, DeviceList) {
 /// PowerShell superflu à l'aperçu) ?
 fn profile_has_applications(path: &Path) -> bool {
     let Ok(bytes) = std::fs::read(path) else { return false };
-    let bytes = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(&bytes);
-    String::from_utf8_lossy(bytes).contains(r#""applications""#)
+    // Recherche en octets : évite d'allouer + valider tout le fichier en
+    // String juste pour chercher « \"applications\" » (le BOM UTF-8 ne peut
+    // pas perturber une recherche ASCII).
+    const NEEDLE: &[u8] = br#""applications""#;
+    bytes
+        .windows(NEEDLE.len())
+        .any(|window| window == NEEDLE)
 }
 
 /// Vue « Applications » : processus audio actifs avec leur route persistée
