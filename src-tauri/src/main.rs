@@ -43,7 +43,6 @@ fn main() {
             commands::delete_profile,
             commands::import_profile,
             commands::profiles_folder,
-            commands::profile_path,
             commands::choose_profiles_folder,
             commands::open_profiles_folder,
             commands::install_audio_module,

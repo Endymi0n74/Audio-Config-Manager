@@ -26,8 +26,7 @@
 │                                                                 │
 │  audio-config-manager.ps1  → script PS embarqué dans la binaire│
 │    (Get-AudioDevice / Set-AudioDevice du module                │
-│     AudioDeviceCmdlets) — overview, export, preview, restore,  │
-│     devices                                                     │
+│     AudioDeviceCmdlets) — overview, export, preview, restore     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -50,8 +49,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File <script> \
 
 - `overview` — périphériques par défaut (ID, nom, volume) + compteurs
   lecture/enregistrement + disponibilité du module (`moduleAvailable`).
-- `devices` — liste des périphériques actifs par flux (ID + nom), pour
-  le moteur de routage par application (`current_devices`).
+  (La liste des périphériques actifs est 100 % Rust : `current_devices`
+  → `app_routing::active_devices`, COM direct, aucun appel PowerShell.)
 - `export` — écrit un profil JSON (Metadata + PlaybackDevices +
   RecordingDevices + DefaultPlayback + DefaultRecording), schéma v3.1.
 - `preview` — lit un profil et indique si ses périphériques par défaut

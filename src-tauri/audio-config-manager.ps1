@@ -33,14 +33,6 @@ function Export-Profile {
   @{ok=$true;message='Profil sauvegardé'} | ConvertTo-Json -Compress
 }
 function Find-Device($list,$saved){ return $list | Where-Object { $_.ID -eq $saved.ID -or $_.Name -eq $saved.Name } | Select-Object -First 1 }
-function Devices {
-  if (-not (Module-Ready)) { @{moduleAvailable=$false;playbackDevices=@();recordingDevices=@()} | ConvertTo-Json -Depth 5 -Compress; return }
-  Import-Module AudioDeviceCmdlets
-  $all = @(Get-AudioDevice -List)
-  $p = @($all | Where-Object Type -eq 'Playback' | ForEach-Object { @{ID=$_.ID;Name=$_.Name} })
-  $r = @($all | Where-Object Type -eq 'Recording' | ForEach-Object { @{ID=$_.ID;Name=$_.Name} })
-  @{moduleAvailable=$true;playbackDevices=$p;recordingDevices=$r} | ConvertTo-Json -Depth 5 -Compress
-}
 function Preview-Profile {
   if (-not (Module-Ready)) { throw "Le module AudioDeviceCmdlets n’est pas installé." }
   Import-Module AudioDeviceCmdlets
@@ -61,4 +53,4 @@ function Restore-Profile {
   foreach($saved in @($config.PlaybackDevices)+@($config.RecordingDevices)){ $d=Find-Device $all $saved; if($d -and $null -ne $saved.Volume){try{Set-AudioDevice -ID $d.ID -Volume $saved.Volume;$applied++}catch{}} }
   @{ok=$true;applied=$applied;missing=$missing;message="$applied réglage(s) appliqué(s)"} | ConvertTo-Json -Depth 5 -Compress
 }
-switch($Action){'overview'{Overview};'devices'{Devices};'export'{Export-Profile};'preview'{Preview-Profile};'restore'{Restore-Profile};default{throw 'Action inconnue'}}
+switch($Action){'overview'{Overview};'export'{Export-Profile};'preview'{Preview-Profile};'restore'{Restore-Profile};default{throw 'Action inconnue'}}

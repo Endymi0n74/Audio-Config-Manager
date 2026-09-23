@@ -38,7 +38,6 @@ let previewPath = null;
 let confirmPath = null;
 let previewOpener = null;
 let confirmOpener = null;
-let busy = false;
 let appsTimer = null;
 // Dernière réponse `app_sessions` affichée (sérialisée) : tant qu'elle est
 // identique, la liste n'est pas reconstruite (voir loadAppSessions).
@@ -65,7 +64,6 @@ function setStatus(text, tone = "") {
 }
 
 function setBusy(isBusy) {
-  busy = isBusy;
   document.querySelectorAll("button").forEach((button) => {
     if (button.id !== "install-module") {
       button.disabled = isBusy;

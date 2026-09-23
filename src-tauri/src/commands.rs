@@ -2,8 +2,7 @@
 //! comportements que l'application originale (« Audio Config Manager ») :
 //! settings, update_settings, overview, save_profile, preview_profile,
 //! restore_profile, delete_profile, import_profile, profiles_folder,
-//! profile_path, choose_profiles_folder, open_profiles_folder,
-//! install_audio_module.
+//! choose_profiles_folder, open_profiles_folder, install_audio_module.
 
 use crate::app_routing::{self, AppPreviewRow, AppSessionRow, Flow};
 use crate::profiles::{self, ProfileEntry};
@@ -496,14 +495,6 @@ pub fn profiles_folder() -> Result<ProfilesFolder, String> {
         path: folder.to_string_lossy().to_string(),
         profiles,
     })
-}
-
-/// Chemin absolu d'un profil du dossier, à partir de son nom.
-#[tauri::command]
-pub fn profile_path(name: String) -> Result<String, String> {
-    let (settings, _) = ready()?;
-    let path = PathBuf::from(&settings.profiles_folder).join(name);
-    Ok(path.to_string_lossy().to_string())
 }
 
 /// Ouvre la boîte de dialogue de choix de dossier et enregistre le nouveau
