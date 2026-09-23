@@ -10,6 +10,9 @@ pub const APP_DATA_FOLDER: &str = "Audio Config Manager";
 pub const SETTINGS_FILE: &str = "settings.json";
 /// Nom du dossier de profils par défaut, créé dans Documents.
 pub const DEFAULT_PROFILES_FOLDER_NAME: &str = "Audio Profiles";
+/// Libellés d'erreur partagés (même texte dans tous les modules).
+pub const ERR_CONFIG_DIR: &str = "Dossier de configuration introuvable";
+pub const ERR_PROFILE_PATH: &str = "Chemin de profil refusé";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -44,7 +47,7 @@ impl Default for Settings {
 pub fn config_dir() -> Result<PathBuf, String> {
     match std::env::var_os("APPDATA") {
         Some(appdata) => Ok(PathBuf::from(appdata).join(APP_DATA_FOLDER)),
-        None => Err("Dossier de configuration introuvable".to_string()),
+        None => Err(ERR_CONFIG_DIR.to_string()),
     }
 }
 
@@ -78,7 +81,7 @@ pub fn load() -> Result<Settings, String> {
 /// Persiste les paramètres.
 pub fn save(settings: &Settings) -> Result<(), String> {
     let dir = config_dir()?;
-    std::fs::create_dir_all(&dir).map_err(|e| format!("Dossier de configuration introuvable : {e}"))?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("{ERR_CONFIG_DIR} : {e}"))?;
     let json = serde_json::to_string_pretty(settings)
         .map_err(|e| format!("Sérialisation des paramètres impossible : {e}"))?;
     std::fs::write(dir.join(SETTINGS_FILE), json)
@@ -89,7 +92,7 @@ pub fn save(settings: &Settings) -> Result<(), String> {
 pub fn validate(mut settings: Settings) -> Result<Settings, String> {
     let folder = settings.profiles_folder.trim().to_string();
     if folder.is_empty() {
-        return Err("Chemin de profil refusé".to_string());
+        return Err(ERR_PROFILE_PATH.to_string());
     }
     settings.profiles_folder = folder;
     Ok(settings)

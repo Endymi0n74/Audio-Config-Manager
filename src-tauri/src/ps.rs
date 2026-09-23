@@ -13,6 +13,8 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
+use crate::settings::ERR_CONFIG_DIR;
+
 /// Empêche un enfant PowerShell d'afficher une fenêtre de console.
 ///
 /// L'application est liée en GUI (subsystem windows) et n'a donc aucune
@@ -59,7 +61,7 @@ pub fn ensure_script(config_dir: &Path) -> Result<std::path::PathBuf, String> {
         Ok(existing) if existing == expected => {}
         _ => {
             std::fs::create_dir_all(config_dir)
-                .map_err(|e| format!("Dossier de configuration introuvable : {e}"))?;
+                .map_err(|e| format!("{ERR_CONFIG_DIR} : {e}"))?;
             std::fs::write(&script_path, expected.as_bytes())
                 .map_err(|e| format!("Écriture du script impossible : {e}"))?;
         }

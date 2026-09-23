@@ -7,7 +7,7 @@
 use crate::app_routing::{self, AppPreviewRow, AppSessionRow, DeviceList, Flow};
 use crate::profiles::{self, ProfileEntry};
 use crate::ps::{self, Overview, PreviewInfo, RestoreInfo};
-use crate::settings::{self, Settings};
+use crate::settings::{self, Settings, ERR_CONFIG_DIR, ERR_PROFILE_PATH};
 use chrono::Local;
 use serde::Serialize;
 use serde_json::Value;
@@ -115,7 +115,7 @@ fn ready() -> Result<(Settings, PathBuf), String> {
 fn run_export(script: &Path, destination: &Path) -> Result<usize, String> {
     if let Some(parent) = destination.parent() {
         std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Dossier de configuration introuvable : {e}"))?;
+            .map_err(|e| format!("{ERR_CONFIG_DIR} : {e}"))?;
     }
     let value = ps::run_script(script, "export", Some(destination))?;
     if !value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
@@ -156,7 +156,7 @@ pub fn settings() -> Result<Settings, String> {
 pub fn update_settings(new_settings: Settings) -> Result<Settings, String> {
     let settings = settings::validate(new_settings)?;
     std::fs::create_dir_all(&settings.profiles_folder)
-        .map_err(|e| format!("Chemin de profil refusé : {e}"))?;
+        .map_err(|e| format!("{ERR_PROFILE_PATH} : {e}"))?;
     settings::save(&settings)?;
     Ok(settings)
 }
@@ -200,7 +200,7 @@ pub async fn save_profile(app: tauri::AppHandle) -> Result<SaveProfileResult, St
     if path.as_os_str().is_empty()
         || path.extension().and_then(|e| e.to_str()) != Some("json")
     {
-        return Err("Chemin de profil refusé".to_string());
+        return Err(ERR_PROFILE_PATH.to_string());
     }
 
     let (_, script) = ready()?;
@@ -465,7 +465,7 @@ pub async fn import_profile(app: tauri::AppHandle) -> Result<ImportProfileResult
     let (settings, _) = ready()?;
     let folder = PathBuf::from(&settings.profiles_folder);
     std::fs::create_dir_all(&folder)
-        .map_err(|e| format!("Chemin de profil refusé : {e}"))?;
+        .map_err(|e| format!("{ERR_PROFILE_PATH} : {e}"))?;
     let destination = profiles::unique_path(&folder, &name);
     std::fs::copy(&source, &destination)
         .map_err(|e| format!("Copie du profil impossible : {e}"))?;
@@ -483,7 +483,7 @@ pub fn profiles_folder() -> Result<ProfilesFolder, String> {
     let (settings, _) = ready()?;
     let folder = PathBuf::from(&settings.profiles_folder);
     std::fs::create_dir_all(&folder)
-        .map_err(|e| format!("Chemin de profil refusé : {e}"))?;
+        .map_err(|e| format!("{ERR_PROFILE_PATH} : {e}"))?;
     let profiles = profiles::list_profiles(&folder)?;
     Ok(ProfilesFolder {
         path: folder.to_string_lossy().to_string(),
@@ -518,7 +518,7 @@ pub fn open_profiles_folder() -> Result<(), String> {
     let (settings, _) = ready()?;
     let folder = PathBuf::from(&settings.profiles_folder);
     std::fs::create_dir_all(&folder)
-        .map_err(|e| format!("Chemin de profil refusé : {e}"))?;
+        .map_err(|e| format!("{ERR_PROFILE_PATH} : {e}"))?;
     std::process::Command::new("explorer.exe")
         .arg(&folder)
         .spawn()

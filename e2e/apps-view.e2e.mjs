@@ -26,6 +26,7 @@ const FAKE = resolve(ROOT, "src-tauri", "target", "release", "fakeaudio.exe");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const results = [];
 let fake = null;
+let fakePid = null;
 let app = null;
 let ws = null;
 
@@ -45,11 +46,15 @@ async function cleanup() {
   try { if (fake) fake.kill(); } catch {}
   try { if (app) app.kill(); } catch {}
   try { ws?.close(); } catch {}
-  // Filet de sécurité : plus aucune route ni processus factice résiduel.
+  // Filet de sécurité : tue les processus ENCORE vivants lancés par ce test,
+  // par PID — jamais par nom d'image, pour ne pas tuer l'instance de
+  // l'utilisateur qui tournerait en parallèle.
   await sleep(500);
   try {
     const { execSync } = await import("node:child_process");
-    execSync("taskkill /F /IM fakeaudio.exe 2>nul & taskkill /F /IM \"Audio Config Manager.exe\" 2>nul", { shell: "cmd" });
+    for (const pid of [app?.pid, fakePid].filter((p) => Number.isInteger(p))) {
+      try { execSync(`taskkill /F /PID ${pid} 2>nul`); } catch {}
+    }
   } catch {}
 }
 
@@ -74,7 +79,7 @@ async function evalJs(expression) {
 try {
   // ---- 1. Processus audio factice ---------------------------------------
   fake = spawn(FAKE, [], { stdio: ["ignore", "pipe", "ignore"] });
-  const fakePid = await new Promise((resolve, reject) => {
+  fakePid = await new Promise((resolve, reject) => {
     let buf = "";
     const to = setTimeout(() => reject(new Error("fakeaudio : PID introuvable (10 s)")), 10000);
     fake.stdout.on("data", (d) => {

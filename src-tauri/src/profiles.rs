@@ -49,17 +49,17 @@ pub fn list_profiles(folder: &Path) -> Result<Vec<ProfileEntry>, String> {
 /// Renvoie un chemin libre dans `folder` pour `name`, en ajoutant un
 /// suffixe « (2) », « (3) »… si le nom existe déjà.
 pub fn unique_path(folder: &Path, name: &str) -> PathBuf {
+    let stem = Path::new(name)
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "profil".into());
+    let ext = Path::new(name)
+        .extension()
+        .map(|e| e.to_string_lossy().to_string())
+        .unwrap_or_else(|| "json".into());
     let mut candidate = folder.join(name);
     let mut counter = 2;
     while candidate.exists() {
-        let stem = Path::new(name)
-            .file_stem()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_else(|| "profil".into());
-        let ext = Path::new(name)
-            .extension()
-            .map(|e| e.to_string_lossy().to_string())
-            .unwrap_or_else(|| "json".into());
         candidate = folder.join(format!("{stem} ({counter}).{ext}"));
         counter += 1;
     }
