@@ -122,6 +122,6 @@ Valeurs utiles : `eRender=0 / eCapture=1` ; rôles `eConsole=0 / eMultimedia=1` 
 
 ## Version / misc
 
-- Cargo package + app version: **1.1.0**.
+- Cargo package + app version: **1.0.0**.
 - Reference original binary: `D:\0day\Audio Config Manager.exe` (the user's v3.1-era exe — reference only, do not delete).
 - The app is committed to git (repo `Endymi0n74/Audio-Config-Manager`, branch `main`) and released as tag **v1.0.0**; the GitHub Actions workflow (`.github/workflows/build.yml`) builds on every push/PR and publishes the exe to a GitHub Release on `v*` tags. Screenshots for the README live in `docs/screens/`.

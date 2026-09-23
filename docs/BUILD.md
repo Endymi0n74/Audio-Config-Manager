@@ -94,20 +94,30 @@ Microsoft est requis (présent par défaut sur Windows 10/11).
 ## Tests
 
 ```powershell
-cargo test --manifest-path src-tauri/Cargo.toml
+npm run check     # syntaxe du frontend (node --check)
+npm run test      # cargo test : 32 tests, 2 ignorés (matériel, --ignored)
+npm run clippy    # clippy --all-targets -- -D warnings (requis par la CI)
+npm run e2e       # vue Applications via CDP (nécessite fakeaudio compilé)
 ```
 
 Les tests unitaires couvrent la logique sans matériel audio :
 chargement/enregistrement des paramètres, listage et rétention des
 profils, noms de fichiers uniques, validation des profils importés et
-parsing des réponses du script. Le comportement audio réel (module
-AudioDeviceCmdlets) se vérifie en lançant l'application.
+parsing des réponses du script. Deux tests matériels (`--ignored`,
+`live_policy_round_trip` et `e2e_apps_view_set_clear_missing`) exigent
+un vrai périphérique audio + `fakeaudio.exe` compilé
+(`cargo build --release --bin fakeaudio`) ; le scénario « introuvable »
+de la vue Applications est couvert côté frontend par `e2e/apps-view.e2e.mjs`.
+Le comportement audio réel (module AudioDeviceCmdlets) se vérifie en
+lançant l'application.
 
 ## CI
 
 `.github/workflows/build.yml` tourne sur `windows-latest` : installe
-Rust + Node, lance `cargo test`, puis `npm run tauri build`, et
-publie l'exécutable en artefact.
+Rust + Node (cache `Swatinem/rust-cache`), lance `node --check`,
+`cargo test`, `clippy -D warnings`, puis `build-release.ps1`, publie
+`dist/` en artefact et attache l'exécutable à une GitHub Release sur
+les tags `v*`.
 
 ## Dépannage
 

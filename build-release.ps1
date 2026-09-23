@@ -21,14 +21,10 @@
 #      `frontend_is_embedded_via_custom_protocol` (aucune fenêtre de
 #      terminal, aucun écran ERR_CONNECTION_REFUSED).
 #
-# PIÈGE (historique) : ne PAS lancer `cargo build --release --bins`
-# APRÈS `npm run tauri build` — `--bins` recompilait l'exe principal
-# SANS `custom-protocol`, écrasait le bon binaire et donnait un exe qui
-# essaie de charger le serveur de dev (localhost:1420) → écran
-# « localhost a refusé de se connecter ». Depuis que `custom-protocol`
-# est une feature PAR DÉFAUT (Cargo.toml), tout `cargo build --release`
-# embarque le frontend ; l'ordre ci-dessus reste le plus sûr et le test
-# Rust garde l'anti-régression.
+# PIÈGE : ne jamais recompiler l'exe principal SANS `custom-protocol`
+# (ex. `cargo build --release --bins` après l'étape 2) — l'exe tenterait de
+# charger le serveur de dev (ERR_CONNECTION_REFUSED). Le test Rust garde
+# l'anti-régression.
 #
 # Résultat : `dist\Audio Config Manager.exe`, prêt à être copié/distribué
 # (la CLI `route` est une sous-commande de l'exe principal ; fakeaudio.exe
@@ -104,11 +100,8 @@ try {
     throw "Copie de $dst impossible : $($_.Exception.Message) - fermez l'application (l'exe est verrouille s'il est en cours d'execution)."
 }
 
-# Les builds antérieurs copiaient aussi route.exe et fakeaudio.exe dans
-# dist/ : ce sont des outils de developpement (CLI de debug et faux
-# processus audio pour les tests E2E), pas des binaires a distribuer. Ils
-# restent dans target/release/ (ou les tests les cherchent) ; on supprime
-# les copies obsolete de dist/ pour garder un livrable mono-exe.
+# Garde-fou mono-exe : supprime les copies obsolètes d'outils de dev
+# (route.exe, fakeaudio.exe) restées dans dist/ par d'anciens builds.
 foreach ($legacy in @('route.exe', 'fakeaudio.exe')) {
     $stale = Join-Path $dist $legacy
     if (Test-Path $stale) {

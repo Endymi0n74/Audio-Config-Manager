@@ -480,18 +480,22 @@ button { font-family: inherit; }
 
 .profiles-list { display: flex; flex-direction: column; gap: 8px; }
 
-.profile-item {
+.profile-item,
+.app-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
-  padding: 14px 16px 14px 20px;
   box-shadow: var(--shadow-sm);
 }
-.profile-item:hover { border-color: var(--border-strong); }
+.profile-item:hover,
+.app-item:hover { border-color: var(--border-strong); }
+.profile-item {
+  gap: 16px;
+  padding: 14px 16px 14px 20px;
+}
 
 .profile-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .profile-name {
@@ -519,25 +523,15 @@ button { font-family: inherit; }
   align-items: center;
   gap: 10px;
 }
-.empty-state .card-ic { color: var(--text-3); }
-.empty-state .btn { margin-top: 4px; }
 
 /* ---- Vue Applications --------------------------------------------------- */
 .apps-list { display: flex; flex-direction: column; gap: 8px; }
 
 .app-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   gap: 24px;
   flex-wrap: wrap;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
   padding: 14px 20px;
-  box-shadow: var(--shadow-sm);
 }
-.app-item:hover { border-color: var(--border-strong); }
 
 .app-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .app-name-row {
@@ -644,30 +638,27 @@ button { font-family: inherit; }
 
 .setting-control { display: flex; align-items: center; gap: 10px; }
 
-.folder-control input {
-  width: 330px;
+.folder-control input,
+.number-input {
   background: transparent;
   border: 1px solid var(--border-strong);
   border-radius: var(--r-sm);
   color: var(--text);
   font: inherit;
-  font-size: 12px;
   padding: 6px 10px;
+}
+.folder-control input:focus-visible,
+.number-input:focus-visible { border-color: var(--accent); outline: none; }
+.folder-control input {
+  width: 330px;
+  font-size: 12px;
   font-family: "Cascadia Mono", Consolas, monospace;
 }
-.folder-control input:focus-visible { border-color: var(--accent); outline: none; }
 
 .number-input {
   width: 88px;
-  background: transparent;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--r-sm);
-  color: var(--text);
-  font: inherit;
   font-size: 13px;
-  padding: 6px 10px;
 }
-.number-input:focus-visible { border-color: var(--accent); outline: none; }
 
 .settings-actions {
   display: flex;

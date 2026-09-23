@@ -177,7 +177,7 @@ choix du fichier (dialogue natif)
 
 ### Veille sur les périphériques (`watchDevices`, dans `main.rs`)
 
-Un thread interroge `overview` toutes les 3 s ; si les périphériques par
+Un thread interroge `overview` toutes les 10 s ; si les périphériques par
 défaut changent, une sauvegarde horodatée est créée et les événements
 `profiles-changed` / `devices-changed` sont émis vers l'interface.
 
