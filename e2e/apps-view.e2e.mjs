@@ -186,7 +186,12 @@ try {
     ).trim();
     const allIds = raw.split("|").map((s) => s.trim()).filter(Boolean);
     const absentId = allIds.find((id) => !activeIds.includes(id));
-    if (!absentId) {
+    if (!raw) {
+      // Module AudioDeviceCmdlets absent : le scénario est invérifiable,
+      // pas « réussi » — SKIP explicite plutôt que faux négatif silencieux.
+      introuvableSkip = true;
+      introuvableStatus = "module AudioDeviceCmdlets indisponible — scénario non vérifiable";
+    } else if (!absentId) {
       introuvableSkip = true;
       introuvableStatus = "aucun périphérique inactif trouvé";
     } else {
