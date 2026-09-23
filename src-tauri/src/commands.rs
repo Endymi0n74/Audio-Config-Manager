@@ -539,15 +539,6 @@ pub async fn install_audio_module() -> Result<ModuleResult, String> {
 mod tests {
     use super::*;
 
-    fn temp_dir() -> PathBuf {
-        static SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-        let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!("acm-cmd-{}-{n}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
     #[test]
     fn timestamp_matches_reference_format() {
         let value = timestamp();
@@ -562,7 +553,7 @@ mod tests {
 
     #[test]
     fn valid_profile_detected() {
-        let dir = temp_dir();
+        let dir = profiles::temp_dir("acm-cmd");
         let good = dir.join("good.json");
         std::fs::write(
             &good,
@@ -574,7 +565,7 @@ mod tests {
 
     #[test]
     fn invalid_profiles_rejected() {
-        let dir = temp_dir();
+        let dir = profiles::temp_dir("acm-cmd");
         let not_json = dir.join("not-json.json");
         std::fs::write(&not_json, "ceci n'est pas du json").unwrap();
         assert!(!is_valid_profile(&not_json));

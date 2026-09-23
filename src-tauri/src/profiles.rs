@@ -125,24 +125,22 @@ fn is_versioned_name(name: &str) -> bool {
 }
 
 #[cfg(test)]
+pub(crate) fn temp_dir(prefix: &str) -> PathBuf {
+    static SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!("{prefix}-{}-{n}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
-    fn temp_dir() -> PathBuf {
-        static SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-        let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!(
-            "acm-test-{}-{n}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
     #[test]
     fn unique_path_increments_suffix() {
-        let dir = temp_dir();
+        let dir = temp_dir("acm-test");
         let first = unique_path(&dir, "profil.json");
         assert_eq!(first.file_name().unwrap().to_string_lossy(), "profil.json");
         std::fs::write(&first, "{}").unwrap();
@@ -152,7 +150,7 @@ mod tests {
 
     #[test]
     fn list_profiles_sorts_by_modified_desc() {
-        let dir = temp_dir();
+        let dir = temp_dir("acm-test");
         let old = dir.join("old.json");
         let new = dir.join("new.json");
         std::fs::write(&old, "{}").unwrap();
@@ -174,7 +172,7 @@ mod tests {
 
     #[test]
     fn prune_versions_keeps_newest() {
-        let dir = temp_dir();
+        let dir = temp_dir("acm-test");
         for i in 1..=5 {
             let name = format!("2026-09-0{i} 08-00-00.json");
             std::fs::write(dir.join(name), "{}").unwrap();
@@ -194,7 +192,7 @@ mod tests {
 
     #[test]
     fn prune_versions_keep_zero_keeps_everything() {
-        let dir = temp_dir();
+        let dir = temp_dir("acm-test");
         for i in 1..=3 {
             std::fs::write(dir.join(format!("2026-09-0{i} 08-00-00.json")), "{}").unwrap();
         }

@@ -42,8 +42,6 @@ const readyBadge = must("ready-badge");
 let currentSettings = null;
 let previewPath = null;
 let confirmPath = null;
-let previewOpener = null;
-let confirmOpener = null;
 let appsTimer = null;
 // Dernière réponse `app_sessions` affichée (sérialisée) : tant qu'elle est
 // identique, la liste n'est pas reconstruite (voir loadAppSessions).
@@ -496,6 +494,22 @@ async function loadProfiles() {
   }
 }
 
+// Modales : ouverture/fermeture générique (focus restauré à la fermeture).
+const modalOpeners = new Map();
+
+function openModal(modalId, cancelId) {
+  modalOpeners.set(modalId, document.activeElement);
+  must(modalId).classList.remove("hidden");
+  must(cancelId).focus();
+}
+
+function closeModal(modalId) {
+  must(modalId).classList.add("hidden");
+  const opener = modalOpeners.get(modalId);
+  modalOpeners.delete(modalId);
+  if (opener instanceof HTMLElement) opener.focus();
+}
+
 async function openPreview(profile) {
   previewPath = profile.path;
   must("preview-file").textContent = profile.name;
@@ -524,23 +538,15 @@ async function openPreview(profile) {
     error.textContent = String(err);
     content.appendChild(error);
   }
-  previewOpener = document.activeElement;
-  must("preview-modal").classList.remove("hidden");
-  must("preview-cancel").focus();
+  openModal("preview-modal", "preview-cancel");
 }
 
-function closePreview() {
-  must("preview-modal").classList.add("hidden");
-  if (previewOpener instanceof HTMLElement) previewOpener.focus();
-  previewOpener = null;
-}
-
-must("preview-cancel").addEventListener("click", closePreview);
+must("preview-cancel").addEventListener("click", () => closeModal("preview-modal"));
 
 must("preview-confirm").addEventListener("click", async () => {
   if (!previewPath) return;
   const path = previewPath;
-  closePreview();
+  closeModal("preview-modal");
   setStatus("Restauration en cours…");
   await runBusy(async () => {
     try {
@@ -558,23 +564,15 @@ must("preview-confirm").addEventListener("click", async () => {
 function confirmDelete(profile) {
   confirmPath = profile.path;
   must("confirm-file").textContent = profile.name;
-  confirmOpener = document.activeElement;
-  must("confirm-modal").classList.remove("hidden");
-  must("confirm-cancel").focus();
+  openModal("confirm-modal", "confirm-cancel");
 }
 
-function closeConfirm() {
-  must("confirm-modal").classList.add("hidden");
-  if (confirmOpener instanceof HTMLElement) confirmOpener.focus();
-  confirmOpener = null;
-}
-
-must("confirm-cancel").addEventListener("click", closeConfirm);
+must("confirm-cancel").addEventListener("click", () => closeModal("confirm-modal"));
 
 must("confirm-ok").addEventListener("click", async () => {
   if (!confirmPath) return;
   const path = confirmPath;
-  closeConfirm();
+  closeModal("confirm-modal");
   await runBusy(async () => {
     try {
       const result = await invoke("delete_profile", { path });
@@ -717,14 +715,17 @@ must("install-module").addEventListener("click", async () => {
 // Clavier : Échap ferme la modale ouverte ; clic sur le voile aussi.
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
-  if (!must("preview-modal").classList.contains("hidden")) closePreview();
-  else if (!must("confirm-modal").classList.contains("hidden")) closeConfirm();
+  for (const id of ["preview-modal", "confirm-modal"]) {
+    if (!must(id).classList.contains("hidden")) {
+      closeModal(id);
+      return;
+    }
+  }
 });
 for (const id of ["preview-modal", "confirm-modal"]) {
   must(id).addEventListener("click", (event) => {
     if (event.target !== must(id)) return;
-    if (id === "preview-modal") closePreview();
-    else closeConfirm();
+    closeModal(id);
   });
 }
 
