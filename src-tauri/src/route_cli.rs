@@ -27,7 +27,8 @@ use std::ffi::c_void;
 use std::path::Path;
 
 use crate::app_routing::{
-    active_devices, list_active_app_routes, routing_available, set_app_route, AppSessionRow, Flow,
+    active_devices, list_active_app_routes, parse_flow, routing_available, set_app_route,
+    AppSessionRow, DeviceList, Flow,
 };
 
 const USAGE: &str = "\
@@ -151,8 +152,6 @@ pub fn run(args: &[String]) -> i32 {
 }
 
 /// Vérifie le moteur et récupère sessions + périphériques en une fois.
-type DeviceList = Vec<(String, String)>;
-
 fn collect() -> Result<(Vec<AppSessionRow>, DeviceList, DeviceList), String> {
     if !routing_available() {
         return Err("Routage par application indisponible sur ce système.".to_string());
@@ -207,12 +206,13 @@ fn cmd_sessions() -> i32 {
 fn cmd_devices(flow_arg: Option<&str>) -> i32 {
     let flows: Vec<(&str, Flow)> = match flow_arg {
         None => vec![("output", Flow::Output), ("input", Flow::Input)],
-        Some("output") => vec![("output", Flow::Output)],
-        Some("input") => vec![("input", Flow::Input)],
-        Some(other) => {
-            eprintln!("Flux inconnu : {other} (attendu « output » ou « input »)");
-            return 1;
-        }
+        Some(arg) => match parse_flow(arg) {
+            Ok(flow) => vec![(arg, flow)],
+            Err(e) => {
+                eprintln!("{e}");
+                return 1;
+            }
+        },
     };
     for (label, flow) in flows {
         println!("== {label} ==");
@@ -368,11 +368,10 @@ fn cmd_set(args: &[String]) -> i32 {
         eprintln!("Usage : route set <process> <output|input> <device|system>");
         return 1;
     };
-    let flow = match flow_arg.as_str() {
-        "output" => Flow::Output,
-        "input" => Flow::Input,
-        _ => {
-            eprintln!("Flux inconnu : {flow_arg} (attendu « output » ou « input »)");
+    let flow = match parse_flow(flow_arg.as_str()) {
+        Ok(flow) => flow,
+        Err(e) => {
+            eprintln!("{e}");
             return 1;
         }
     };

@@ -12,8 +12,8 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
 
-/// Nom du dossier de configuration (identique à `settings::APP_DATA_FOLDER`).
-const LOG_FOLDER: &str = "Audio Config Manager";
+use crate::settings::APP_DATA_FOLDER;
+
 /// Nom du fichier journal.
 const LOG_FILE: &str = "debug.log";
 
@@ -21,7 +21,7 @@ const LOG_FILE: &str = "debug.log";
 /// dossier courant si `APPDATA` est absent.
 fn log_path() -> PathBuf {
     match std::env::var_os("APPDATA") {
-        Some(appdata) => PathBuf::from(appdata).join(LOG_FOLDER).join(LOG_FILE),
+        Some(appdata) => PathBuf::from(appdata).join(APP_DATA_FOLDER).join(LOG_FILE),
         None => PathBuf::from(LOG_FILE),
     }
 }

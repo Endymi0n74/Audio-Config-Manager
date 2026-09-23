@@ -4,7 +4,13 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "check": "node --check src/main.js",
+    "test": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
+    "e2e": "node e2e/apps-view.e2e.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

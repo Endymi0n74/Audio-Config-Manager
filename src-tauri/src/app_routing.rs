@@ -199,6 +199,46 @@ impl Flow {
     }
 }
 
+/// Liste `(identifiant, nom)` des périphériques d'un flux.
+pub(crate) type DeviceList = Vec<(String, String)>;
+
+/// Convertit un nom de flux (« output »/« input ») en `Flow`.
+pub(crate) fn parse_flow(value: &str) -> Result<Flow, String> {
+    match value {
+        "output" => Ok(Flow::Output),
+        "input" => Ok(Flow::Input),
+        _ => Err("Flux audio inconnu (attendu « output » ou « input »)".into()),
+    }
+}
+
+/// Nom convivial d'un identifiant de périphérique, si présent dans la liste.
+fn device_name(devices: &[(String, String)], device_id: &str) -> Option<String> {
+    devices
+        .iter()
+        .find(|(id, _)| id.eq_ignore_ascii_case(device_id))
+        .map(|(_, name)| name.clone())
+}
+
+/// Cible connue ? Identifiant d'abord, nom ensuite (insensible à la casse).
+fn device_known(devices: &[(String, String)], target: &RouteTarget) -> bool {
+    devices.iter().any(|(id, name)| {
+        id.eq_ignore_ascii_case(&target.device_id)
+            || target
+                .device_name
+                .as_deref()
+                .is_some_and(|n| name.eq_ignore_ascii_case(n))
+    })
+}
+
+/// Lit un profil JSON en ignorant le BOM UTF-8 (PowerShell 5.1).
+fn read_profile_json(profile_path: &Path) -> Result<Value, String> {
+    let bytes = std::fs::read(profile_path).map_err(|e| format!("Profil illisible : {e}"))?;
+    // Set-Content -Encoding UTF8 de PowerShell 5.1 écrit un BOM UTF-8.
+    let bytes = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(&bytes);
+    let raw = String::from_utf8_lossy(bytes);
+    serde_json::from_str(&raw).map_err(|e| format!("Profil JSON invalide : {e}"))
+}
+
 /// Identifiants d'interface « emballés » par le registre audio Windows.
 const MMDEVAPI_TOKEN: &str = r"\\?\SWD#MMDEVAPI#";
 const RENDER_INTERFACE: &str = "#{e6327cad-dcec-4949-ae8a-991e976a79d2}";
@@ -354,29 +394,32 @@ impl Drop for HString {
 
 type Job = Box<dyn FnOnce() + Send>;
 
-fn apartment_sender() -> &'static mpsc::Sender<Job> {
+fn apartment_sender() -> Result<&'static mpsc::Sender<Job>, String> {
     static APARTMENT: OnceLock<mpsc::Sender<Job>> = OnceLock::new();
-    APARTMENT.get_or_init(|| {
-        let (sender, receiver) = mpsc::channel::<Job>();
-        std::thread::Builder::new()
-            .name("audio-policy-config".into())
-            .spawn(move || {
-                // RO_INIT_SINGLETHREADED — appartement STA pour la classe.
-                unsafe { ffi::RoInitialize(0) };
-                for job in receiver {
-                    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(job));
-                }
-                unsafe { ffi::RoUninitialize() };
-            })
-            .expect("impossible de lancer le thread audio-policy");
-        sender
-    })
+    if let Some(sender) = APARTMENT.get() {
+        return Ok(sender);
+    }
+    let (sender, receiver) = mpsc::channel::<Job>();
+    std::thread::Builder::new()
+        .name("audio-policy-config".into())
+        .spawn(move || {
+            // RO_INIT_SINGLETHREADED — appartement STA pour la classe.
+            unsafe { ffi::RoInitialize(0) };
+            for job in receiver {
+                let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(job));
+            }
+            unsafe { ffi::RoUninitialize() };
+        })
+        .map_err(|e| format!("impossible de lancer le thread audio-policy : {e}"))?;
+    // En cas de course, le doublon est abandonné : son thread se termine
+    // dès que son `sender` est libéré (canal fermé).
+    Ok(APARTMENT.get_or_init(|| sender))
 }
 
 /// Exécute `f` sur le thread d'appartement COM et renvoie son résultat.
 fn with_apartment<R: Send + 'static>(f: impl FnOnce() -> R + Send + 'static) -> Result<R, String> {
     let (sender, receiver) = mpsc::channel::<R>();
-    apartment_sender()
+    apartment_sender()?
         .send(Box::new(move || {
             let _ = sender.send(f());
         }))
@@ -841,7 +884,9 @@ pub fn active_devices(flow: Flow) -> Vec<(String, String)> {
 /// convivial)`. Le nom vient de `PKEY_Device_FriendlyName` (IPropertyStore),
 /// comme dans le panneau Son de Windows — sans passer par PowerShell. Utilisé
 /// par la CLI de débogage (`src/bin/route.rs`).
-pub fn list_active_devices(flow: Flow) -> Vec<(String, String)> {
+/// Énumération brute (sans appartement COM) — réservée aux tests et au
+/// wrapper `active_devices` ; en production, passer par `active_devices`.
+fn list_active_devices(flow: Flow) -> Vec<(String, String)> {
     type EnumAudioEndpointsFn = unsafe extern "system" fn(
         *mut std::ffi::c_void,
         i32,
@@ -1079,7 +1124,7 @@ fn record_index(
 /// Exporte les routes par application persistées vers le format du profil.
 /// Les listes `(identifiant, nom)` des périphériques actifs servent à
 /// retrouver le nom d'une cible.
-pub fn export_app_routes(
+pub(crate) fn export_app_routes(
     playback_devices: &[(String, String)],
     recording_devices: &[(String, String)],
 ) -> Result<(Vec<ApplicationEntry>, Vec<String>), String> {
@@ -1123,10 +1168,7 @@ pub fn export_app_routes(
                 let index =
                     record_index(&mut records, &identity, info.name.clone(), info.exe.clone());
                 let target = RouteTarget {
-                    device_name: devices
-                        .iter()
-                        .find(|(id, _)| id.eq_ignore_ascii_case(&device_id))
-                        .map(|(_, name)| name.clone()),
+                    device_name: device_name(&devices, &device_id),
                     device_id,
                 };
                 match flow {
@@ -1146,12 +1188,7 @@ pub fn export_app_routes(
 /// Écrit la section « applications » dans un profil JSON exporté par le
 /// script PowerShell. Renvoie le nombre d'applications enregistrées.
 pub fn attach_applications_to_profile(profile_path: &Path) -> Result<usize, String> {
-    let bytes = std::fs::read(profile_path).map_err(|e| format!("Profil illisible : {e}"))?;
-    // Set-Content -Encoding UTF8 de PowerShell 5.1 écrit un BOM UTF-8.
-    let bytes = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(&bytes);
-    let raw = String::from_utf8_lossy(bytes);
-    let mut root: Value =
-        serde_json::from_str(&raw).map_err(|e| format!("Profil JSON invalide : {e}"))?;
+    let mut root: Value = read_profile_json(profile_path)?;
 
     let devices = |key: &str| -> Vec<(String, String)> {
         root.get(key)
@@ -1199,11 +1236,8 @@ pub fn attach_applications_to_profile(profile_path: &Path) -> Result<usize, Stri
 }
 
 /// Section « applications » d'un profil (absente → liste vide).
-pub fn applications_in_profile(profile_path: &Path) -> Result<Vec<ApplicationEntry>, String> {
-    let bytes = std::fs::read(profile_path).map_err(|e| format!("Profil illisible : {e}"))?;
-    let bytes = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(&bytes);
-    let raw = String::from_utf8_lossy(bytes);
-    let root: Value = serde_json::from_str(&raw).map_err(|e| format!("Profil JSON invalide : {e}"))?;
+pub(crate) fn applications_in_profile(profile_path: &Path) -> Result<Vec<ApplicationEntry>, String> {
+    let root: Value = read_profile_json(profile_path)?;
     let applications = root
         .get("applications")
         .and_then(Value::as_array)
@@ -1227,15 +1261,8 @@ pub fn preview_applications(
         let matches = match_processes(&entry, &running);
         let target_preview = |target: Option<&RouteTarget>, devices: &[(String, String)]| {
             target.map(|route| {
-                let present = devices.iter().any(|(id, name)| {
-                    id.eq_ignore_ascii_case(&route.device_id)
-                        || route
-                            .device_name
-                            .as_deref()
-                            .is_some_and(|n| name.eq_ignore_ascii_case(n))
-                });
                 TargetPreview {
-                    present,
+                    present: device_known(devices, route),
                     device_id: route.device_id.clone(),
                     device_name: route.device_name.clone(),
                 }
@@ -1255,7 +1282,7 @@ pub fn preview_applications(
 /// Restaure les routes par application d'un profil : chaque application est
 /// retrouvée (chemin d'exécutable puis nom) parmi les processus en cours,
 /// puis ses routes persistées sont réécrites pour chaque flux.
-pub fn restore_applications(
+pub(crate) fn restore_applications(
     entries: &[ApplicationEntry],
     playback_devices: &[(String, String)],
     recording_devices: &[(String, String)],
@@ -1305,14 +1332,7 @@ pub fn restore_applications(
             ] {
                 let Some(target) = target else { continue };
                 // Périphérique cible : identifiant d'abord, nom ensuite.
-                let known = devices.iter().any(|(id, name)| {
-                    id.eq_ignore_ascii_case(&target.device_id)
-                        || target
-                            .device_name
-                            .as_deref()
-                            .is_some_and(|n| name.eq_ignore_ascii_case(n))
-                });
-                if !known {
+                if !device_known(devices, target) {
                     report.missing.push(format!(
                         "{label} — {} introuvable : {}",
                         flow.label(),
@@ -1414,10 +1434,7 @@ pub fn list_active_app_routes(
                             Flow::Output => playback.as_slice(),
                             Flow::Input => recording.as_slice(),
                         };
-                        let device_name = devices
-                            .iter()
-                            .find(|(id, _)| id.eq_ignore_ascii_case(&device_id))
-                            .map(|(_, name)| name.clone());
+                        let device_name = device_name(devices, &device_id);
                         Some(RouteTarget { device_id, device_name })
                     }
                     _ => None,

@@ -79,8 +79,14 @@ fn run_capture(
         .stderr(Stdio::piped())
         .spawn()
         .map_err(spawn_error)?;
-    let stdout = child.stdout.take().expect("stdout dupliqué");
-    let stderr = child.stderr.take().expect("stderr dupliqué");
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or("Sortie PowerShell indisponible")?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or("Erreur PowerShell indisponible")?;
 
     let out_thread = std::thread::spawn(move || {
         let mut out = String::new();

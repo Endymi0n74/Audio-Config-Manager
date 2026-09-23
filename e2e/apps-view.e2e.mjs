@@ -13,17 +13,21 @@
 // (nécessite fakeaudio.exe compilé : cargo build --release --bin fakeaudio)
 
 import { spawn } from "node:child_process";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const PORT = 9230;
-const APP = "D:\\Codex\\Audio Manager Windows\\dist\\Audio Config Manager.exe";
-const FAKE = "D:\\Codex\\Audio Manager Windows\\src-tauri\\target\\release\\fakeaudio.exe";
+// Chemins relatifs au dépôt (le script vit dans e2e/) : aucune dépendance
+// à l'emplacement du clone.
+const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+const APP = resolve(ROOT, "dist", "Audio Config Manager.exe");
+const FAKE = resolve(ROOT, "src-tauri", "target", "release", "fakeaudio.exe");
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const results = [];
 let fake = null;
 let app = null;
 let ws = null;
-let injectedScriptId = null;
 
 function record(name, ok, detail) {
   results.push({ name, ok, detail });
@@ -38,11 +42,6 @@ function recordSkip(name, detail) {
 }
 
 async function cleanup() {
-  try {
-    if (injectedScriptId && ws) {
-      await send("Page.removeScriptToEvaluateOnNewDocument", { identifier: injectedScriptId }).catch(() => {});
-    }
-  } catch {}
   try { if (fake) fake.kill(); } catch {}
   try { if (app) app.kill(); } catch {}
   try { ws?.close(); } catch {}
@@ -170,6 +169,7 @@ try {
   // affiche l'option « (introuvable) ».
   let missing = null;
   let introuvableStatus = "non évalué";
+  let introuvableSkip = false;
   try {
     const { execSync } = await import("node:child_process");
     const activeIds = await evalJs(
@@ -182,6 +182,7 @@ try {
     const allIds = raw.split("|").map((s) => s.trim()).filter(Boolean);
     const absentId = allIds.find((id) => !activeIds.includes(id));
     if (!absentId) {
+      introuvableSkip = true;
       introuvableStatus = "aucun périphérique inactif trouvé";
     } else {
       const setResult = await evalJs(
@@ -211,7 +212,7 @@ try {
   } catch (err) {
     introuvableStatus = `erreur : ${err.message}`;
   }
-  if (introuvableStatus.startsWith("aucun périphérique")) {
+  if (introuvableSkip) {
     recordSkip(
       "INTROUVABLE : option « (introuvable) » rendue",
       "aucun périphérique inactif sur cette machine — le scénario nécessite un périphérique désactivé (voir le test Rust pour le garde-fou)",

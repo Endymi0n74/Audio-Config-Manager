@@ -1,6 +1,12 @@
 // API Tauri injectée globalement (withGlobalTauri) — ce projet n'utilise
 // aucun bundler, les imports ES de @tauri-apps/api ne seraient pas résolus.
-const $ = (id) => document.getElementById(id);
+// Accès aux éléments statiques : échec explicite plutôt que TypeError obscur
+// si un id est renommé dans index.html.
+function must(id) {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(`Élément introuvable : #${id}`);
+  return el;
+}
 
 // Rend les erreurs JavaScript visibles au lieu d'échouer en silence.
 window.addEventListener("error", (event) => {
@@ -13,8 +19,8 @@ window.addEventListener("unhandledrejection", (event) => {
 const __TAURI__ = window.__TAURI__;
 if (!__TAURI__) {
   document.addEventListener("DOMContentLoaded", () => {
-    $("ready-badge").textContent = "● API Tauri indisponible";
-    $("ready-badge").style.color = "var(--red)";
+    must("ready-badge").textContent = "● API Tauri indisponible";
+    must("ready-badge").style.color = "var(--red)";
     toast("API Tauri non injectée — application hors Tauri ?", "error");
   });
   throw new Error("API Tauri indisponible");
@@ -23,15 +29,15 @@ const invoke = __TAURI__.core.invoke;
 const listen = __TAURI__.event.listen;
 
 const views = {
-  overview: $("view-overview"),
-  profiles: $("view-profiles"),
-  apps: $("view-apps"),
-  settings: $("view-settings"),
+  overview: must("view-overview"),
+  profiles: must("view-profiles"),
+  apps: must("view-apps"),
+  settings: must("view-settings"),
 };
 
 const navItems = document.querySelectorAll(".nav-item");
-const statusText = $("status-text");
-const readyBadge = $("ready-badge");
+const statusText = must("status-text");
+const readyBadge = must("ready-badge");
 
 let currentSettings = null;
 let previewPath = null;
@@ -57,7 +63,7 @@ function withTimeout(promise, milliseconds, message) {
 
 function setStatus(text, tone = "") {
   statusText.textContent = text;
-  const bar = $("status-bar");
+  const bar = must("status-bar");
   bar.classList.toggle("hidden", !text.trim());
   bar.classList.toggle("error", tone === "error");
   bar.classList.toggle("success", tone === "success");
@@ -72,7 +78,7 @@ function setBusy(isBusy) {
 }
 
 function toast(message, tone = "") {
-  const container = $("toasts");
+  const container = must("toasts");
   const item = document.createElement("div");
   item.className = `toast ${tone}`.trim();
   item.textContent = message;
@@ -84,6 +90,22 @@ function toast(message, tone = "") {
   }, 4200);
 }
 
+// Erreur utilisateur standard : toast + barre de statut, même message.
+function reportError(err) {
+  toast(String(err), "error");
+  setStatus(String(err), "error");
+}
+
+// Exécute une action en désactivant les boutons pendant sa durée.
+async function runBusy(action) {
+  setBusy(true);
+  try {
+    await action();
+  } finally {
+    setBusy(false);
+  }
+}
+
 function switchView(view) {
   Object.entries(views).forEach(([key, element]) => {
     element.classList.toggle("hidden", key !== view);
@@ -93,15 +115,15 @@ function switchView(view) {
     clearInterval(appsTimer);
     appsTimer = null;
   }
-  if (view === "profiles") loadProfiles();
+  if (view === "profiles") loadProfiles().catch(reportError);
   if (view === "apps") {
-    loadAppSessions();
+    loadAppSessions().catch(reportError);
     // Rafraîchissement en temps réel : les indicateurs « En lecture »
     // suivent les sessions audio toutes les 15 secondes ; la liste n'est
     // reconstruite que si l'état a réellement changé (voir loadAppSessions).
-    appsTimer = setInterval(loadAppSessions, 15000);
+    appsTimer = setInterval(() => loadAppSessions().catch(reportError), 15000);
   }
-  if (view === "settings") loadSettingsForm();
+  if (view === "settings") loadSettingsForm().catch(reportError);
 }
 
 navItems.forEach((item) => {
@@ -239,9 +261,9 @@ function updatePlayingBadges(list, sessions) {
 
 // Vue « Applications » : processus audio actifs + route persistée courante.
 async function loadAppSessions() {
-  const list = $("apps-list");
-  const banner = $("apps-banner");
-  const empty = $("apps-empty");
+  const list = must("apps-list");
+  const banner = must("apps-banner");
+  const empty = must("apps-empty");
   // Ne pas interrompre une interaction en cours : liste déroulante ouverte
   // (le sélecteur a le focus) ou écriture de route en cours (sélecteur
   // désactivé) — le prochain cycle rafraîchira.
@@ -293,14 +315,15 @@ async function loadAppSessions() {
   empty.classList.add("hidden");
   if (!result.available || result.error) {
     banner.classList.remove("hidden");
-    $("apps-banner-text").textContent =
+    must("apps-banner-text").textContent =
       result.error || "Routage par application indisponible sur ce système.";
     return;
   }
   if (!result.sessions.length) {
     empty.classList.remove("hidden");
     return;
-  }    for (const session of result.sessions) {
+  }
+  for (const session of result.sessions) {
     const item = document.createElement("div");
     item.className = "app-item";
     item.dataset.pid = String(session.pid);
@@ -337,7 +360,7 @@ async function loadAppSessions() {
   }
 }
 
-$("apps-refresh").addEventListener("click", () => loadAppSessions());
+must("apps-refresh").addEventListener("click", () => loadAppSessions().catch(reportError));
 
 // Section « Routage par application » de l'aperçu d'un profil.
 function previewAppsSection(apps) {
@@ -388,18 +411,18 @@ async function loadOverview() {
     );
     const playback = overview.defaultPlayback;
     const recording = overview.defaultRecording;
-    const playbackEl = $("playback-summary");
-    const inputEl = $("input-summary");
+    const playbackEl = must("playback-summary");
+    const inputEl = must("input-summary");
     playbackEl.textContent = playback?.name ?? "Aucune sortie détectée";
     playbackEl.title = playback?.name ?? "";
     playbackEl.classList.toggle("value-empty", !playback);
     inputEl.textContent = recording?.name ?? "Aucune entrée détectée";
     inputEl.title = recording?.name ?? "";
     inputEl.classList.toggle("value-empty", !recording);
-    $("playback-detail").textContent = `${overview.playbackCount} sortie(s) détectée(s)`;
-    $("input-detail").textContent = `${overview.recordingCount} entrée(s) détectée(s)`;
+    must("playback-detail").textContent = `${overview.playbackCount} sortie(s) détectée(s)`;
+    must("input-detail").textContent = `${overview.recordingCount} entrée(s) détectée(s)`;
 
-    const banner = $("module-banner");
+    const banner = must("module-banner");
     banner.classList.toggle("hidden", overview.moduleAvailable);
     readyBadge.textContent = overview.moduleAvailable
       ? "● Module prêt"
@@ -409,13 +432,13 @@ async function loadOverview() {
     readyBadge.textContent = "● Indisponible";
     readyBadge.style.color = "var(--red)";
     setStatus(String(err), "error");
-    $("module-banner").classList.remove("hidden");
-    $("module-banner-text").textContent = String(err);
+    must("module-banner").classList.remove("hidden");
+    must("module-banner-text").textContent = String(err);
   }
 }
 
 async function loadProfiles() {
-  const list = $("profiles-list");
+  const list = must("profiles-list");
   list.innerHTML = "";
   try {
     const result = await withTimeout(
@@ -423,8 +446,8 @@ async function loadProfiles() {
       10000,
       "La lecture du dossier de profils a expiré (10 s).",
     );
-    $("profiles-folder-label").textContent = result.path;
-    const countEl = $("profiles-count");
+    must("profiles-folder-label").textContent = result.path;
+    const countEl = must("profiles-count");
     if (result.profiles.length) {
       countEl.textContent = String(result.profiles.length);
       countEl.classList.remove("value-empty");
@@ -433,10 +456,10 @@ async function loadProfiles() {
       countEl.classList.add("value-empty");
     }
     if (!result.profiles.length) {
-      $("profiles-empty").classList.remove("hidden");
+      must("profiles-empty").classList.remove("hidden");
       return;
     }
-    $("profiles-empty").classList.add("hidden");
+    must("profiles-empty").classList.add("hidden");
     for (const profile of result.profiles) {
       const item = document.createElement("div");
       item.className = "profile-item";
@@ -457,7 +480,7 @@ async function loadProfiles() {
       restore.type = "button";
       restore.className = "btn btn-primary";
       restore.textContent = "Restaurer";
-      restore.addEventListener("click", () => openPreview(profile));
+      restore.addEventListener("click", () => openPreview(profile).catch(reportError));
       const remove = document.createElement("button");
       remove.type = "button";
       remove.className = "btn btn-ghost btn-danger-ghost";
@@ -468,15 +491,15 @@ async function loadProfiles() {
       list.appendChild(item);
     }
   } catch (err) {
-    $("profiles-empty").classList.remove("hidden");
-    $("profiles-empty").textContent = String(err);
+    must("profiles-empty").classList.remove("hidden");
+    must("profiles-empty").textContent = String(err);
   }
 }
 
 async function openPreview(profile) {
   previewPath = profile.path;
-  $("preview-file").textContent = profile.name;
-  const content = $("preview-content");
+  must("preview-file").textContent = profile.name;
+  const content = must("preview-content");
   content.innerHTML = "";
   try {
     const preview = await invoke("preview_profile", { path: profile.path });
@@ -502,129 +525,109 @@ async function openPreview(profile) {
     content.appendChild(error);
   }
   previewOpener = document.activeElement;
-  $("preview-modal").classList.remove("hidden");
-  $("preview-cancel").focus();
+  must("preview-modal").classList.remove("hidden");
+  must("preview-cancel").focus();
 }
 
 function closePreview() {
-  $("preview-modal").classList.add("hidden");
+  must("preview-modal").classList.add("hidden");
   if (previewOpener instanceof HTMLElement) previewOpener.focus();
   previewOpener = null;
 }
 
-$("preview-cancel").addEventListener("click", closePreview);
+must("preview-cancel").addEventListener("click", closePreview);
 
-$("preview-confirm").addEventListener("click", async () => {
+must("preview-confirm").addEventListener("click", async () => {
   if (!previewPath) return;
+  const path = previewPath;
   closePreview();
-  setBusy(true);
   setStatus("Restauration en cours…");
-  try {
-    const result = await invoke("restore_profile", { path: previewPath });
-    toast(result.message, "success");
-    setStatus(result.message, "success");
-    loadProfiles();
-    loadOverview();
-  } catch (err) {
-    toast(String(err), "error");
-    setStatus(String(err), "error");
-  } finally {
-    setBusy(false);
-  }
+  await runBusy(async () => {
+    try {
+      const result = await invoke("restore_profile", { path });
+      toast(result.message, "success");
+      setStatus(result.message, "success");
+      loadProfiles();
+      loadOverview();
+    } catch (err) {
+      reportError(err);
+    }
+  });
 });
 
 function confirmDelete(profile) {
   confirmPath = profile.path;
-  $("confirm-file").textContent = profile.name;
+  must("confirm-file").textContent = profile.name;
   confirmOpener = document.activeElement;
-  $("confirm-modal").classList.remove("hidden");
-  $("confirm-cancel").focus();
+  must("confirm-modal").classList.remove("hidden");
+  must("confirm-cancel").focus();
 }
 
 function closeConfirm() {
-  $("confirm-modal").classList.add("hidden");
+  must("confirm-modal").classList.add("hidden");
   if (confirmOpener instanceof HTMLElement) confirmOpener.focus();
   confirmOpener = null;
 }
 
-$("confirm-cancel").addEventListener("click", closeConfirm);
+must("confirm-cancel").addEventListener("click", closeConfirm);
 
-$("confirm-ok").addEventListener("click", async () => {
+must("confirm-ok").addEventListener("click", async () => {
   if (!confirmPath) return;
+  const path = confirmPath;
   closeConfirm();
-  setBusy(true);
-  try {
-    const result = await invoke("delete_profile", { path: confirmPath });
-    toast(result.message, "success");
-    loadProfiles();
-    loadOverview();
-  } catch (err) {
-    toast(String(err), "error");
-  } finally {
-    setBusy(false);
-  }
-});
-
-$("new-profile").addEventListener("click", async () => {
-  setBusy(true);
-  setStatus("Sauvegarde du profil en cours…");
-  try {
-    const result = await invoke("save_profile");
-    if (result.saved) {
-      toast(result.message, "success");
-      setStatus(result.message, "success");
-      loadProfiles();
-    } else {
-      setStatus(result.message);
-    }
-  } catch (err) {
-    toast(String(err), "error");
-    setStatus(String(err), "error");
-  } finally {
-    setBusy(false);
-  }
-});
-
-$("save-profile-card").addEventListener("click", async () => {
-  setBusy(true);
-  setStatus("Sauvegarde du profil en cours…");
-  try {
-    const result = await invoke("save_profile");
-    if (result.saved) {
-      toast(result.message, "success");
-      setStatus(result.message, "success");
-    } else {
-      setStatus(result.message);
-    }
-  } catch (err) {
-    toast(String(err), "error");
-    setStatus(String(err), "error");
-  } finally {
-    setBusy(false);
-  }
-});
-
-$("go-profiles-card").addEventListener("click", () => switchView("profiles"));
-
-$("import-profile").addEventListener("click", async () => {
-  setBusy(true);
-  try {
-    const result = await invoke("import_profile");
-    if (result.imported) {
+  await runBusy(async () => {
+    try {
+      const result = await invoke("delete_profile", { path });
       toast(result.message, "success");
       loadProfiles();
-    } else if (result.message) {
-      setStatus(result.message);
+      loadOverview();
+    } catch (err) {
+      reportError(err);
     }
-  } catch (err) {
-    toast(String(err), "error");
-    setStatus(String(err), "error");
-  } finally {
-    setBusy(false);
-  }
+  });
 });
 
-$("open-folder").addEventListener("click", async () => {
+async function doSaveProfile(reloadList) {
+  setStatus("Sauvegarde du profil en cours…");
+  await runBusy(async () => {
+    try {
+      const result = await invoke("save_profile");
+      if (result.saved) {
+        toast(result.message, "success");
+        setStatus(result.message, "success");
+        if (reloadList) loadProfiles();
+      } else {
+        setStatus(result.message);
+      }
+    } catch (err) {
+      reportError(err);
+    }
+  });
+}
+
+must("new-profile").addEventListener("click", () => doSaveProfile(true));
+
+must("save-profile-card").addEventListener("click", () => doSaveProfile(false));
+
+must("go-profiles-card").addEventListener("click", () => switchView("profiles"));
+
+must("import-profile").addEventListener("click", async () => {
+  await runBusy(async () => {
+    try {
+      const result = await invoke("import_profile");
+      if (result.imported) {
+        toast(result.message, "success");
+        loadProfiles();
+      } else if (result.message) {
+        setStatus(result.message);
+      }
+    } catch (err) {
+      reportError(err);
+    }
+  });
+});
+
+must("open-folder").addEventListener("click", async () => {
   try {
     await invoke("open_profiles_folder");
   } catch (err) {
@@ -632,19 +635,22 @@ $("open-folder").addEventListener("click", async () => {
   }
 });
 
-$("choose-folder").addEventListener("click", async () => {
-  setBusy(true);
-  try {
-    currentSettings = await invoke("choose_profiles_folder");
-    loadProfiles();
-    loadSettingsForm();
-    toast("Dossier des profils modifié", "success");
-  } catch (err) {
-    toast(String(err), "error");
-  } finally {
-    setBusy(false);
-  }
-});
+async function pickProfilesFolder(reloadList) {
+  await runBusy(async () => {
+    try {
+      // `choose_profiles_folder` renvoie les réglages, mais loadSettingsForm
+      // les recharge déjà : la valeur de retour est ignorée.
+      await invoke("choose_profiles_folder");
+      if (reloadList) loadProfiles();
+      loadSettingsForm();
+      toast("Dossier des profils modifié", "success");
+    } catch (err) {
+      toast(String(err), "error");
+    }
+  });
+}
+
+must("choose-folder").addEventListener("click", () => pickProfilesFolder(true));
 
 async function loadSettingsForm() {
   try {
@@ -653,56 +659,44 @@ async function loadSettingsForm() {
     toast(String(err), "error");
     return;
   }
-  $("profiles-folder-input").value = currentSettings.profilesFolder;
-  $("backup-before-restore").checked = currentSettings.backupBeforeRestore;
-  $("auto-save-on-start").checked = currentSettings.autoSaveOnStart;
-  $("watch-devices").checked = currentSettings.watchDevices;
-  $("keep-versions").value = String(currentSettings.keepVersions);
-  $("settings-status").textContent = "";
+  must("profiles-folder-input").value = currentSettings.profilesFolder;
+  must("backup-before-restore").checked = currentSettings.backupBeforeRestore;
+  must("auto-save-on-start").checked = currentSettings.autoSaveOnStart;
+  must("watch-devices").checked = currentSettings.watchDevices;
+  must("keep-versions").value = String(currentSettings.keepVersions);
+  must("settings-status").textContent = "";
 }
 
-$("pick-folder").addEventListener("click", async () => {
-  setBusy(true);
-  try {
-    currentSettings = await invoke("choose_profiles_folder");
-    loadSettingsForm();
-    toast("Dossier des profils modifié", "success");
-  } catch (err) {
-    toast(String(err), "error");
-  } finally {
-    setBusy(false);
-  }
-});
+must("pick-folder").addEventListener("click", () => pickProfilesFolder(false));
 
-$("save-settings").addEventListener("click", async () => {
+must("save-settings").addEventListener("click", async () => {
   if (!currentSettings) return;
-  setBusy(true);
-  $("settings-status").textContent = "Enregistrement…";
-  try {
-    currentSettings = await invoke("update_settings", {
-      newSettings: {
-        profilesFolder: $("profiles-folder-input").value.trim(),
-        backupBeforeRestore: $("backup-before-restore").checked,
-        autoSaveOnStart: $("auto-save-on-start").checked,
-        keepVersions: Number($("keep-versions").value) || 0,
-        watchDevices: $("watch-devices").checked,
-      },
-    });
-    $("settings-status").textContent = "Paramètres enregistrés.";
-    $("settings-status").style.color = "var(--green)";
-    toast("Paramètres enregistrés", "success");
-    loadOverview();
-  } catch (err) {
-    $("settings-status").textContent = String(err);
-    $("settings-status").style.color = "var(--red)";
-    toast(String(err), "error");
-  } finally {
-    setBusy(false);
-  }
+  await runBusy(async () => {
+    must("settings-status").textContent = "Enregistrement…";
+    try {
+      currentSettings = await invoke("update_settings", {
+        newSettings: {
+          profilesFolder: must("profiles-folder-input").value.trim(),
+          backupBeforeRestore: must("backup-before-restore").checked,
+          autoSaveOnStart: must("auto-save-on-start").checked,
+          keepVersions: Number(must("keep-versions").value) || 0,
+          watchDevices: must("watch-devices").checked,
+        },
+      });
+      must("settings-status").textContent = "Paramètres enregistrés.";
+      must("settings-status").style.color = "var(--green)";
+      toast("Paramètres enregistrés", "success");
+      loadOverview();
+    } catch (err) {
+      must("settings-status").textContent = String(err);
+      must("settings-status").style.color = "var(--red)";
+      toast(String(err), "error");
+    }
+  });
 });
 
-$("install-module").addEventListener("click", async () => {
-  const button = $("install-module");
+must("install-module").addEventListener("click", async () => {
+  const button = must("install-module");
   button.disabled = true;
   const original = button.textContent;
   button.textContent = "Installation en cours…";
@@ -713,8 +707,7 @@ $("install-module").addEventListener("click", async () => {
     setStatus(result.message, "success");
     loadOverview();
   } catch (err) {
-    toast(String(err), "error");
-    setStatus(String(err), "error");
+    reportError(err);
   } finally {
     button.textContent = original;
     button.disabled = false;
@@ -724,20 +717,21 @@ $("install-module").addEventListener("click", async () => {
 // Clavier : Échap ferme la modale ouverte ; clic sur le voile aussi.
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
-  if (!$("preview-modal").classList.contains("hidden")) closePreview();
-  else if (!$("confirm-modal").classList.contains("hidden")) closeConfirm();
+  if (!must("preview-modal").classList.contains("hidden")) closePreview();
+  else if (!must("confirm-modal").classList.contains("hidden")) closeConfirm();
 });
 for (const id of ["preview-modal", "confirm-modal"]) {
-  $(id).addEventListener("click", (event) => {
-    if (event.target !== $(id)) return;
+  must(id).addEventListener("click", (event) => {
+    if (event.target !== must(id)) return;
     if (id === "preview-modal") closePreview();
     else closeConfirm();
   });
 }
 
-// Événements émis par le backend
+// Événements émis par le backend (les chargeurs gèrent déjà leurs erreurs,
+// le catch n'est qu'un filet anti-rejet non géré).
 listen("profiles-changed", () => {
-  loadProfiles();
+  loadProfiles().catch(reportError);
 });
 
 listen("devices-changed", (event) => {
@@ -748,7 +742,7 @@ listen("devices-changed", (event) => {
       : "Périphériques modifiés",
     "info",
   );
-  loadOverview();
+  loadOverview().catch(reportError);
 });
 
 // Couleur d'accent système : remplace les variables CSS `--accent*`.

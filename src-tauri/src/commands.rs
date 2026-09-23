@@ -4,7 +4,7 @@
 //! restore_profile, delete_profile, import_profile, profiles_folder,
 //! choose_profiles_folder, open_profiles_folder, install_audio_module.
 
-use crate::app_routing::{self, AppPreviewRow, AppSessionRow, Flow};
+use crate::app_routing::{self, AppPreviewRow, AppSessionRow, DeviceList, Flow};
 use crate::profiles::{self, ProfileEntry};
 use crate::ps::{self, Overview, PreviewInfo, RestoreInfo};
 use crate::settings::{self, Settings};
@@ -228,8 +228,6 @@ pub async fn save_profile(app: tauri::AppHandle) -> Result<SaveProfileResult, St
 /// Énumération COM directe (`IMMDeviceEnumerator` + nom convivial via
 /// `PKEY_Device_FriendlyName`, voir `app_routing::active_devices`) : plus
 /// aucun lancement PowerShell pour lister les périphériques.
-type DeviceList = Vec<(String, String)>;
-
 fn current_devices() -> (DeviceList, DeviceList) {
     (
         app_routing::active_devices(Flow::Output),
@@ -290,11 +288,7 @@ pub async fn set_app_route(
     flow: String,
     device_id: Option<String>,
 ) -> Result<(), String> {
-    let flow = match flow.as_str() {
-        "output" => Flow::Output,
-        "input" => Flow::Input,
-        _ => return Err("Flux audio inconnu (attendu « output » ou « input »)".into()),
-    };
+    let flow = app_routing::parse_flow(&flow)?;
     tauri::async_runtime::spawn_blocking(move || {
         app_routing::set_app_route(pid, flow, device_id)
     })
@@ -430,7 +424,7 @@ pub fn delete_profile(path: String) -> Result<DeleteResult, String> {
 }
 
 /// Vérifie qu'un fichier est bien un profil JSON exploitable.
-pub fn is_valid_profile(path: &Path) -> bool {
+fn is_valid_profile(path: &Path) -> bool {
     let Ok(raw) = std::fs::read_to_string(path) else {
         return false;
     };
