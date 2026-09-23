@@ -9,7 +9,9 @@
 //!   (IID `ab3d4648-…` sur Windows 11 ≥ 21H2, `2a59116d-…` avant), dont les
 //!   emplacements de vtable 25 / 26 / 27 sont respectivement
 //!   `SetPersistedDefaultAudioEndpoint`, `GetPersistedDefaultAudioEndpoint`
-//!   et `ClearAllPersistedApplicationDefaultEndpoints` ;
+//!   et `ClearAllPersistedApplicationDefaultEndpoints` (l'emplacement 27
+//!   n'est pas utilisé : effacer une route passe par `Set…` avec un
+//!   HSTRING NULL, voir `PolicyConfig::set`) ;
 //! - `SetPersistedDefaultAudioEndpoint(pid, eDataFlow, eRole, HSTRING)` :
 //!   l'identifiant de périphérique doit être « emballé » au format
 //!   `\\?\SWD#MMDEVAPI#{id}#{interface-guid}` (interface de rendu ou de
@@ -603,7 +605,106 @@ impl Drop for ComRef {
     fn drop(&mut self) {
         release_com(self.0);
     }
-}// ---------------------------------------------------------------------------
+}
+
+// ---------------------------------------------------------------------------
+// Socle d'énumération WASAPI (IMMDeviceEnumerator → collection → Item/GetId),
+// commun aux sessions audio et aux listes de périphériques.
+// ---------------------------------------------------------------------------
+
+// IMMDeviceEnumerator (vtable) : 0-2 IUnknown, 3 EnumAudioEndpoints.
+type EnumAudioEndpointsFn = unsafe extern "system" fn(
+    *mut std::ffi::c_void,
+    i32,
+    u32,
+    *mut *mut std::ffi::c_void,
+) -> i32;
+// IMMDeviceCollection : 3 GetCount, 4 Item.
+type GetCountU32Fn = unsafe extern "system" fn(*mut std::ffi::c_void, *mut u32) -> i32;
+type ItemFn = unsafe extern "system" fn(
+    *mut std::ffi::c_void,
+    u32,
+    *mut *mut std::ffi::c_void,
+) -> i32;
+// IMMDevice : 4 OpenPropertyStore, 5 GetId.
+type GetIdFn = unsafe extern "system" fn(
+    *mut std::ffi::c_void,
+    *mut *mut u16,
+) -> i32;
+
+/// Énumérateur COM (MMDeviceEnumerator) — libération automatique.
+fn device_enumerator() -> Result<ComRef, String> {
+    let mut enumerator_ptr = std::ptr::null_mut();
+    // SAFETY : création du CLSID standard (MMDeviceEnumerator).
+    let hr = unsafe {
+        ffi::CoCreateInstance(
+            &CLSID_MMDEVICE_ENUMERATOR,
+            std::ptr::null_mut(),
+            CLSCTX_ALL,
+            &IID_IMMDEVICE_ENUMERATOR,
+            &mut enumerator_ptr,
+        )
+    };
+    if hr < 0 || enumerator_ptr.is_null() {
+        return Err(format!("Énumérateur audio indisponible (0x{:08X})", hr as u32));
+    }
+    Ok(ComRef::new(enumerator_ptr))
+}
+
+/// Collection des périphériques d'un flux selon le masque d'état
+/// (`EnumAudioEndpoints`, emplacement 3). `Ok(None)` = énumération vide
+/// (périphérique débranché entre-temps, par ex.).
+fn enum_devices(flow: Flow, state_mask: u32) -> Result<Option<ComRef>, String> {
+    let enumerator = device_enumerator()?;
+    let mut devices_ptr = std::ptr::null_mut();
+    // SAFETY : énumération des périphériques du flux selon le masque d'état.
+    let enum_fn: EnumAudioEndpointsFn =
+        unsafe { std::mem::transmute(vtable_slot(enumerator.ptr(), 3)) };
+    let hr = unsafe { enum_fn(enumerator.ptr(), flow.value(), state_mask, &mut devices_ptr) };
+    if hr < 0 || devices_ptr.is_null() {
+        return Ok(None);
+    }
+    Ok(Some(ComRef::new(devices_ptr)))
+}
+
+/// Nombre de périphériques d'une collection (`GetCount`, emplacement 3 ;
+/// 0 en cas d'échec).
+fn collection_count(devices: &ComRef) -> u32 {
+    let mut count: u32 = 0;
+    // SAFETY : nombre de périphériques.
+    let get_count: GetCountU32Fn = unsafe { std::mem::transmute(vtable_slot(devices.ptr(), 3)) };
+    if unsafe { get_count(devices.ptr(), &mut count) } < 0 {
+        return 0;
+    }
+    count
+}
+
+/// Périphérique n° `index` d'une collection (`Item`, emplacement 4).
+fn collection_item(devices: &ComRef, index: u32) -> Option<ComRef> {
+    let mut device_ptr = std::ptr::null_mut();
+    // SAFETY : accès au périphérique de la collection.
+    let item_fn: ItemFn = unsafe { std::mem::transmute(vtable_slot(devices.ptr(), 4)) };
+    if unsafe { item_fn(devices.ptr(), index, &mut device_ptr) } < 0 || device_ptr.is_null() {
+        return None;
+    }
+    Some(ComRef::new(device_ptr))
+}
+
+/// Identifiant (non emballé) d'un périphérique (`GetId`, emplacement 5).
+fn device_id(device: &ComRef) -> Option<String> {
+    let mut id_ptr: *mut u16 = std::ptr::null_mut();
+    // SAFETY : lecture de l'identifiant du périphérique.
+    let get_id_fn: GetIdFn = unsafe { std::mem::transmute(vtable_slot(device.ptr(), 5)) };
+    if unsafe { get_id_fn(device.ptr(), &mut id_ptr) } < 0 || id_ptr.is_null() {
+        return None;
+    }
+    let len = (0..1024).find(|&i| unsafe { *id_ptr.add(i) } == 0).unwrap_or(0);
+    let id = String::from_utf16_lossy(unsafe { std::slice::from_raw_parts(id_ptr, len) });
+    // SAFETY : libération de la mémoire allouée par GetId (CoTaskMemAlloc).
+    unsafe { ffi::CoTaskMemFree(id_ptr as *mut std::ffi::c_void) };
+    Some(id)
+}
+// ---------------------------------------------------------------------------
 // Énumération WASAPI des sessions audio actives (par flux), comme pycaw.
 // ---------------------------------------------------------------------------
 
@@ -615,20 +716,6 @@ const SESSION_STATE_ACTIVE: i32 = 1;
 /// session (le même PID peut apparaître plusieurs fois, sur des
 /// périphériques ou flux différents).
 fn list_sessions_noinit(flow: Flow) -> Result<Vec<(u32, bool)>, String> {
-    // IMMDeviceEnumerator (vtable) : 0-2 IUnknown, 3 EnumAudioEndpoints.
-    type EnumAudioEndpointsFn = unsafe extern "system" fn(
-        *mut std::ffi::c_void,
-        i32,
-        u32,
-        *mut *mut std::ffi::c_void,
-    ) -> i32;
-    // IMMDeviceCollection : 3 GetCount, 4 Item.
-    type GetCountU32Fn = unsafe extern "system" fn(*mut std::ffi::c_void, *mut u32) -> i32;
-    type ItemFn = unsafe extern "system" fn(
-        *mut std::ffi::c_void,
-        u32,
-        *mut *mut std::ffi::c_void,
-    ) -> i32;
     // IMMDevice : 3 Activate.
     type ActivateFn = unsafe extern "system" fn(
         *mut std::ffi::c_void,
@@ -652,56 +739,15 @@ fn list_sessions_noinit(flow: Flow) -> Result<Vec<(u32, bool)>, String> {
     type GetStateFn = unsafe extern "system" fn(*mut std::ffi::c_void, *mut i32) -> i32;
     type GetProcessIdFn = unsafe extern "system" fn(*mut std::ffi::c_void, *mut u32) -> i32;
 
-    // Création de l'énumérateur (CoCreateInstance) — objet COM à libérer.
-    let mut enumerator_ptr = std::ptr::null_mut();
-    // SAFETY : création du CLSID standard (MMDeviceEnumerator).
-    let hr = unsafe {
-        ffi::CoCreateInstance(
-            &CLSID_MMDEVICE_ENUMERATOR,
-            std::ptr::null_mut(),
-            CLSCTX_ALL,
-            &IID_IMMDEVICE_ENUMERATOR,
-            &mut enumerator_ptr,
-        )
-    };
-    if hr < 0 || enumerator_ptr.is_null() {
-        return Err(format!("Énumérateur audio indisponible (0x{:08X})", hr as u32));
-    }
-    let enumerator = ComRef::new(enumerator_ptr);
-
-    let mut devices_ptr = std::ptr::null_mut();
-    // SAFETY : énumération des périphériques actifs du flux.
-    let enum_fn: EnumAudioEndpointsFn =
-        unsafe { std::mem::transmute(vtable_slot(enumerator.ptr(), 3)) };
-    let hr = unsafe {
-        enum_fn(
-            enumerator.ptr(),
-            flow.value(),
-            DEVICE_STATE_ACTIVE,
-            &mut devices_ptr,
-        )
-    };
-    if hr < 0 || devices_ptr.is_null() {
+    let Some(devices) = enum_devices(flow, DEVICE_STATE_ACTIVE)? else {
         return Ok(Vec::new());
-    }
-    let devices = ComRef::new(devices_ptr);
-
-    let mut count: u32 = 0;
-    // SAFETY : nombre de périphériques.
-    let get_count: GetCountU32Fn = unsafe { std::mem::transmute(vtable_slot(devices.ptr(), 3)) };
-    if unsafe { get_count(devices.ptr(), &mut count) } < 0 {
-        return Ok(Vec::new());
-    }
+    };
 
     let mut entries = Vec::new();
-    for index in 0..count {
-        let mut device_ptr = std::ptr::null_mut();
-        // SAFETY : accès au périphérique de la collection.
-        let item_fn: ItemFn = unsafe { std::mem::transmute(vtable_slot(devices.ptr(), 4)) };
-        if unsafe { item_fn(devices.ptr(), index, &mut device_ptr) } < 0 || device_ptr.is_null() {
+    for index in 0..collection_count(&devices) {
+        let Some(device) = collection_item(&devices, index) else {
             continue;
-        }
-        let device = ComRef::new(device_ptr);
+        };
 
         let mut manager_ptr = std::ptr::null_mut();
         // SAFETY : activation du gestionnaire de sessions du périphérique.
@@ -792,75 +838,18 @@ fn list_session_pids_noinit(flow: Flow) -> Result<Vec<u32>, String> {
 /// périphériques désactivés/débranchés).
 #[cfg(test)] // utilisé seulement par les tests de bout en bout
 fn list_device_ids_by_state(flow: Flow, state_mask: u32) -> Vec<String> {
-    type EnumAudioEndpointsFn = unsafe extern "system" fn(
-        *mut std::ffi::c_void,
-        i32,
-        u32,
-        *mut *mut std::ffi::c_void,
-    ) -> i32;
-    type GetCountU32Fn = unsafe extern "system" fn(*mut std::ffi::c_void, *mut u32) -> i32;
-    type ItemFn = unsafe extern "system" fn(
-        *mut std::ffi::c_void,
-        u32,
-        *mut *mut std::ffi::c_void,
-    ) -> i32;
-    type GetIdFn = unsafe extern "system" fn(
-        *mut std::ffi::c_void,
-        *mut *mut u16,
-    ) -> i32;
-
-    let mut enumerator_ptr = std::ptr::null_mut();
-    // SAFETY : création de l'énumérateur COM standard.
-    let hr = unsafe {
-        ffi::CoCreateInstance(
-            &CLSID_MMDEVICE_ENUMERATOR,
-            std::ptr::null_mut(),
-            CLSCTX_ALL,
-            &IID_IMMDEVICE_ENUMERATOR,
-            &mut enumerator_ptr,
-        )
+    let Some(devices) = enum_devices(flow, state_mask).unwrap_or(None) else {
+        return Vec::new();
     };
-    if hr < 0 || enumerator_ptr.is_null() {
-        return Vec::new();
-    }
-    let enumerator = ComRef::new(enumerator_ptr);
-
-    let mut devices_ptr = std::ptr::null_mut();
-    // SAFETY : énumération des périphériques du flux selon le masque d'état.
-    let enum_fn: EnumAudioEndpointsFn =
-        unsafe { std::mem::transmute(vtable_slot(enumerator.ptr(), 3)) };
-    let hr = unsafe { enum_fn(enumerator.ptr(), flow.value(), state_mask, &mut devices_ptr) };
-    if hr < 0 || devices_ptr.is_null() {
-        return Vec::new();
-    }
-    let devices = ComRef::new(devices_ptr);
-
-    let mut count: u32 = 0;
-    // SAFETY : nombre de périphériques.
-    let get_count: GetCountU32Fn = unsafe { std::mem::transmute(vtable_slot(devices.ptr(), 3)) };
-    if unsafe { get_count(devices.ptr(), &mut count) } < 0 {
-        return Vec::new();
-    }
 
     let mut ids = Vec::new();
-    for index in 0..count {
-        let mut device_ptr = std::ptr::null_mut();
-        // SAFETY : accès au périphérique.
-        let item_fn: ItemFn = unsafe { std::mem::transmute(vtable_slot(devices.ptr(), 4)) };
-        if unsafe { item_fn(devices.ptr(), index, &mut device_ptr) } < 0 || device_ptr.is_null() {
+    for index in 0..collection_count(&devices) {
+        let Some(device) = collection_item(&devices, index) else {
             continue;
-        }
-        let device = ComRef::new(device_ptr);
-        let mut id_ptr: *mut u16 = std::ptr::null_mut();
-        // SAFETY : lecture de l'identifiant du périphérique.
-        let get_id_fn: GetIdFn = unsafe { std::mem::transmute(vtable_slot(device.ptr(), 5)) };
-        if unsafe { get_id_fn(device.ptr(), &mut id_ptr) } < 0 || id_ptr.is_null() {
+        };
+        let Some(id) = device_id(&device) else {
             continue;
-        }
-        let len = (0..1024).find(|&i| unsafe { *id_ptr.add(i) } == 0).unwrap_or(0);
-        let id = String::from_utf16_lossy(unsafe { std::slice::from_raw_parts(id_ptr, len) });
-        // SAFETY : libération de la mémoire allouée par GetId (CoTaskMemAlloc).
-        unsafe { ffi::CoTaskMemFree(id_ptr as *mut std::ffi::c_void) };
+        };
         ids.push(id);
     }
     ids
@@ -887,22 +876,6 @@ pub fn active_devices(flow: Flow) -> Vec<(String, String)> {
 /// Énumération brute (sans appartement COM) — réservée aux tests et au
 /// wrapper `active_devices` ; en production, passer par `active_devices`.
 fn list_active_devices(flow: Flow) -> Vec<(String, String)> {
-    type EnumAudioEndpointsFn = unsafe extern "system" fn(
-        *mut std::ffi::c_void,
-        i32,
-        u32,
-        *mut *mut std::ffi::c_void,
-    ) -> i32;
-    type GetCountU32Fn = unsafe extern "system" fn(*mut std::ffi::c_void, *mut u32) -> i32;
-    type ItemFn = unsafe extern "system" fn(
-        *mut std::ffi::c_void,
-        u32,
-        *mut *mut std::ffi::c_void,
-    ) -> i32;
-    type GetIdFn = unsafe extern "system" fn(
-        *mut std::ffi::c_void,
-        *mut *mut u16,
-    ) -> i32;
     type OpenPropertyStoreFn = unsafe extern "system" fn(
         *mut std::ffi::c_void,
         u32,
@@ -914,59 +887,19 @@ fn list_active_devices(flow: Flow) -> Vec<(String, String)> {
         *mut PropVariant,
     ) -> i32;
 
-    let mut enumerator_ptr = std::ptr::null_mut();
-    // SAFETY : création de l'énumérateur COM standard.
-    let hr = unsafe {
-        ffi::CoCreateInstance(
-            &CLSID_MMDEVICE_ENUMERATOR,
-            std::ptr::null_mut(),
-            CLSCTX_ALL,
-            &IID_IMMDEVICE_ENUMERATOR,
-            &mut enumerator_ptr,
-        )
+    let Some(devices) = enum_devices(flow, DEVICE_STATE_ACTIVE).unwrap_or(None) else {
+        return Vec::new();
     };
-    if hr < 0 || enumerator_ptr.is_null() {
-        return Vec::new();
-    }
-    let enumerator = ComRef::new(enumerator_ptr);
-
-    let mut devices_ptr = std::ptr::null_mut();
-    // SAFETY : énumération des périphériques actifs du flux.
-    let enum_fn: EnumAudioEndpointsFn =
-        unsafe { std::mem::transmute(vtable_slot(enumerator.ptr(), 3)) };
-    let hr = unsafe { enum_fn(enumerator.ptr(), flow.value(), DEVICE_STATE_ACTIVE, &mut devices_ptr) };
-    if hr < 0 || devices_ptr.is_null() {
-        return Vec::new();
-    }
-    let devices = ComRef::new(devices_ptr);
-
-    let mut count: u32 = 0;
-    // SAFETY : nombre de périphériques.
-    let get_count: GetCountU32Fn = unsafe { std::mem::transmute(vtable_slot(devices.ptr(), 3)) };
-    if unsafe { get_count(devices.ptr(), &mut count) } < 0 {
-        return Vec::new();
-    }
 
     let mut result = Vec::new();
-    for index in 0..count {
-        let mut device_ptr = std::ptr::null_mut();
-        // SAFETY : accès au périphérique.
-        let item_fn: ItemFn = unsafe { std::mem::transmute(vtable_slot(devices.ptr(), 4)) };
-        if unsafe { item_fn(devices.ptr(), index, &mut device_ptr) } < 0 || device_ptr.is_null() {
+    for index in 0..collection_count(&devices) {
+        let Some(device) = collection_item(&devices, index) else {
             continue;
-        }
-        let device = ComRef::new(device_ptr);
+        };
 
-        let mut id_ptr: *mut u16 = std::ptr::null_mut();
-        // SAFETY : lecture de l'identifiant du périphérique.
-        let get_id_fn: GetIdFn = unsafe { std::mem::transmute(vtable_slot(device.ptr(), 5)) };
-        if unsafe { get_id_fn(device.ptr(), &mut id_ptr) } < 0 || id_ptr.is_null() {
+        let Some(id) = device_id(&device) else {
             continue;
-        }
-        let len = (0..1024).find(|&i| unsafe { *id_ptr.add(i) } == 0).unwrap_or(0);
-        let id = String::from_utf16_lossy(unsafe { std::slice::from_raw_parts(id_ptr, len) });
-        // SAFETY : libération de la mémoire allouée par GetId (CoTaskMemAlloc).
-        unsafe { ffi::CoTaskMemFree(id_ptr as *mut std::ffi::c_void) };
+        };
 
         // Nom convivial via IPropertyStore (PKEY_Device_FriendlyName).
         let mut name = String::new();
