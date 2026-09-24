@@ -3,6 +3,8 @@
 [![Build status](https://github.com/Endymi0n74/Audio-Config-Manager/actions/workflows/build.yml/badge.svg)](https://github.com/Endymi0n74/Audio-Config-Manager/actions/workflows/build.yml)
 [![Télécharger](https://img.shields.io/badge/T%C3%A9l%C3%A9charger-Windows-2ea44f?style=flat-square)](https://github.com/Endymi0n74/Audio-Config-Manager/releases/latest)
 
+**🇫🇷 Français** · [🇬🇧 English](README.en.md)
+
 Gestion de la configuration audio Windows : périphériques par défaut
 (sortie/entrée), volumes et **routage audio par application**, sauvegardés
 dans des **profils JSON**.
