@@ -122,12 +122,16 @@ cargo test --bin audio-config-manager -- --ignored --nocapture e2e_apps_view_set
 
 # Frontend E2E (real UI set/clear + introuvable rendering via CDP):
 node e2e/apps-view.e2e.mjs
+
+# Watch E2E (INTRUSIVE: flips the default INPUT device ~3-5 s, restores it):
+node e2e/watch-devices.e2e.mjs
 ```
 
 Notes:
 - `fakeaudio` opens a real WASAPI render session so it shows up as an active audio app.
 - The E2E spawns its own app + fakeaudio and kills them in `finally`. If CDP says "unavailable", kill stale `Audio Config Manager`/`fakeaudio` processes first (they can hold the debug port).
 - The introuvable sub-test SKIPs when the machine has no disabled device (Windows refuses routing to off-list ids with 0x80070057).
+- `watch-devices.e2e.mjs` exercises the event-driven `IMMNotificationClient` watch (`app_routing/watch.rs`): real default-input flip → COM callback → `create_auto_backup` → `devices-changed` event, then restore. Everything (default device, `watchDevices` setting, test backup files) is restored/removed in `finally` — it prefers a VIRTUAL target (Voicemeeter) so nothing real is affected.
 
 ## Golden rules for editing
 

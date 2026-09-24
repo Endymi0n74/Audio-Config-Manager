@@ -17,7 +17,6 @@ mod ps;
 mod route_cli;
 mod settings;
 
-use std::time::Duration;
 use tauri::{Emitter, Manager};
 
 fn main() {
@@ -82,46 +81,32 @@ fn main() {
                 });
             }
 
-            // Veille sur les périphériques (watchDevices) : détecte un
-            // changement des périphériques par défaut, sauvegarde une
-            // version horodatée et notifie l'interface. Sondage toutes les
-            // 10 secondes : assez réactif pour un changement manuel de
-            // périphérique, sans lancer PowerShell toutes les 3 s.
-            if current_settings.watch_devices {
-                std::thread::spawn(move || {
-                    let mut last: Option<(String, String)> = None;
-                    loop {
-                        std::thread::sleep(Duration::from_secs(10));
-                        let Ok(current) = settings::load() else { continue };
-                        if !current.watch_devices {
-                            continue;
-                        }
-                        let Ok(config_dir) = settings::config_dir() else { continue };
-                        let Ok(script) = ps::ensure_script(&config_dir) else { continue };
-                        let Ok(value) = ps::run_script(&script, "overview", None) else {
-                            continue;
-                        };
-                        let dp = value["defaultPlayback"]["ID"]
-                            .as_str()
-                            .unwrap_or("")
-                            .to_string();
-                        let dr = value["defaultRecording"]["ID"]
-                            .as_str()
-                            .unwrap_or("")
-                            .to_string();
-                        let key = (dp, dr);
-                        if last.is_some() && last.as_ref() != Some(&key) {
-                            if let Ok(path) = commands::create_auto_backup(&current, &script) {
-                                let _ = handle.emit("profiles-changed", ());
-                                let _ = handle.emit(
-                                    "devices-changed",
-                                    serde_json::json!({ "backup": path }),
-                                );
-                            }
-                        }
-                        last = Some(key);
+            // Veille sur les périphériques (watchDevices) : abonnement COM
+            // IMMNotificationClient (voir app_routing/watch.rs) — détection
+            // instantanée, zéro processus PowerShell en arrière-plan (l'ancien
+            // sondage « overview » toutes les 10 s est supprimé).
+            // Le thread est abonné quelle que soit l'option au démarrage :
+            // chaque événement reverifie settings.watch_devices, donc
+            // activation/désactivation prennent effet immédiatement.
+            if let Err(e) = app_routing::spawn_default_device_watch(
+                move |(playback, recording)| {
+                    let _ = (playback, recording);
+                    let Ok(current) = settings::load() else { return };
+                    if !current.watch_devices {
+                        return;
                     }
-                });
+                    let Ok(config_dir) = settings::config_dir() else { return };
+                    let Ok(script) = ps::ensure_script(&config_dir) else { return };
+                    if let Ok(path) = commands::create_auto_backup(&current, &script) {
+                        let _ = handle.emit("profiles-changed", ());
+                        let _ = handle.emit(
+                            "devices-changed",
+                            serde_json::json!({ "backup": path }),
+                        );
+                    }
+                },
+            ) {
+                crate::logging::warn(&format!("watchDevices indisponible : {e}"));
             }
 
             Ok(())

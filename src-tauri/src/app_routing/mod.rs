@@ -29,25 +29,32 @@
 //! pas ces interfaces).
 //!
 //! Découpage interne (l'API publique reste inchangée, re-exportée ici) :
-//! - `ffi`          — GUID, HSTRING, COM brut, thread d'appartement STA et
-//!                    fabrique AudioPolicyConfig ;
-//! - `devices`      — énumération WASAPI des périphériques (IDs emballés +
-//!                    noms conviviaux) ;
-//! - `sessions`     — énumération des sessions audio actives (PID + lecture) ;
+//! - `ffi` — GUID, HSTRING, COM brut, thread d'appartement STA et fabrique
+//!   AudioPolicyConfig ;
+//! - `devices` — énumération WASAPI des périphériques (IDs emballés + noms
+//!   conviviaux), défauts + volumes de la vue d'ensemble ;
+//! - `sessions` — énumération des sessions audio actives (PID + lecture) ;
 //! - `profile_apps` — logique métier : export/aperçu/restauration de la
-//!                    section « applications » et vue « Applications ».
+//!   section « applications » et vue « Applications » ;
+//! - `watch` — veille event-driven des défauts (`IMMNotificationClient`).
 
 mod devices;
 mod ffi;
 mod profile_apps;
 mod sessions;
+mod watch;
 
-pub use devices::active_devices;
+pub use devices::{active_devices, overview_devices, DeviceOverview};
+// Type des défauts de la vue d'ensemble : nommé uniquement par le test de
+// contrat JSON de `commands.rs` (build normal → re-export inutilisé).
+#[cfg(test)]
+pub use devices::DefaultDeviceInfo;
 pub use ffi::routing_available;
 pub use profile_apps::{
     attach_applications_to_profile, list_active_app_routes, preview_applications,
     restore_applications_in_profile, set_app_route, AppPreviewRow, AppSessionRow, RouteTarget,
 };
+pub use watch::spawn_default_device_watch;
 
 // ---------------------------------------------------------------------------
 // Flux audio et helpers partagés

@@ -19,7 +19,7 @@ pub struct Guid {
     pub data4: [u8; 8],
 }
 
-const fn guid(data1: u32, data2: u16, data3: u16, data4: [u8; 8]) -> Guid {
+pub(super) const fn guid(data1: u32, data2: u16, data3: u16, data4: [u8; 8]) -> Guid {
     Guid { data1, data2, data3, data4 }
 }
 

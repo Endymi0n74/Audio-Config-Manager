@@ -23,20 +23,27 @@
 │  app_routing/    → routage audio PAR APPLICATION (Rust pur,     │
 │                    API interne Windows AudioPolicyConfig)       │
 │                    sous-modules : ffi · devices · sessions ·     │
-│                    profile_apps                                  │
+│                    profile_apps · watch (veille des défauts)     │
 │  appearance.rs   → Mica/arrière-plan + couleur d'accent système │
 │                                                                 │
 │  audio-config-manager.ps1  → script PS embarqué dans la binaire│
 │    (Get-AudioDevice / Set-AudioDevice du module                │
-│     AudioDeviceCmdlets) — overview, export, preview, restore     │
+│     AudioDeviceCmdlets) — export, preview, restore               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-L'application est **Windows uniquement** : le moteur audio *système*
-(défauts, volumes, listes) est PowerShell + le module AudioDeviceCmdlets
-de Microsoft. Le **routage par application** — que le module ne couvre
-pas — est en Rust pur, via l'API interne de Windows (`AudioPolicyConfig`),
-le même mécanisme qu'EarTrumpet ou SoundVolumeView.
+L'application est **Windows uniquement**. Le **routage par application**
+— que le module AudioDeviceCmdlets ne couvre pas — est en Rust pur, via
+l'API interne de Windows (`AudioPolicyConfig`), le même mécanisme
+qu'EarTrumpet ou SoundVolumeView.
+
+La **vue d'ensemble** (« overview ») est elle aussi **100 % COM, sans
+PowerShell** : défauts (`GetDefaultAudioEndpoint`), noms
+(`PKEY_Device_FriendlyName`), volumes (`IAudioEndpointVolume`) et
+compteurs de périphériques actifs sont lus directement en FFI — en
+millisecondes, au lieu du lancement de `powershell.exe` (~2 s). PowerShell
++ le module AudioDeviceCmdlets ne servent plus qu'aux **profils**
+(export / aperçu / restauration) et à l'installation du module.
 
 ## Le moteur PowerShell (`ps.rs` + `audio-config-manager.ps1`)
 
@@ -46,19 +53,18 @@ lancement. Chaque opération est une invocation :
 
 ```
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File <script> \
-    -Action <overview|export|preview|restore> -ConfigPath <profil.json>
+    -Action <export|preview|restore> -ConfigPath <profil.json>
 ```
 
-- `overview` — périphériques par défaut (ID, nom, volume) + compteurs
-  lecture/enregistrement + disponibilité du module (`moduleAvailable`).
-  (La liste des périphériques actifs est 100 % Rust : `current_devices`
-  → `app_routing::active_devices`, COM direct, aucun appel PowerShell.)
 - `export` — écrit un profil JSON (Metadata + PlaybackDevices +
   RecordingDevices + DefaultPlayback + DefaultRecording), schéma v3.1.
 - `preview` — lit un profil et indique si ses périphériques par défaut
   existent sur la machine courante.
 - `restore` — applique les périphériques par défaut puis les volumes de
   tous les périphériques du profil ; renvoie `applied` et `missing`.
+
+L'action `overview` du script est **morte** (l'action existe encore dans
+le `.ps1`, mais plus aucune commande Rust ne l'appelle).
 
 `ps.rs` gère le délai d'exécution (60 s, 10 min pour l'installation du
 module), la capture stdout/stderr sans deadlock (lecture en threads) et
@@ -68,13 +74,14 @@ l'original : « PowerShell indisponible », « Réponse audio invalide »,
 
 ## Routage par application (`app_routing/`)
 
-Le module est découpé en 4 sous-modules : `ffi.rs` (GUID, HSTRING, COM brut,
+Le module est découpé en 5 sous-modules : `ffi.rs` (GUID, HSTRING, COM brut,
 thread d'appartement STA, fabrique AudioPolicyConfig), `devices.rs`
-(énumération WASAPI, IDs emballés, noms conviviaux), `sessions.rs`
-(sessions audio actives) et `profile_apps.rs` (section « applications » du
-profil, export/aperçu/restauration, vue Applications). L'API publique est
-re-exportée depuis `app_routing/mod.rs` (inchangée pour `commands.rs` et la
-CLI `route`).
+(énumération WASAPI, IDs emballés, noms conviviaux **+ vue d'ensemble
+COM** : défauts, volumes, compteurs — `overview_devices`), `sessions.rs`
+(sessions audio actives), `profile_apps.rs` (section « applications » du
+profil, export/aperçu/restauration, vue Applications) et `watch.rs`
+(veille event-driven des défauts). L'API publique est re-exportée depuis
+`app_routing/mod.rs` (inchangée pour `commands.rs` et la CLI `route`).
 
 Le routage « Xbox → une autre carte son », implanté en **Rust pur** —
 aucun crate Windows externe : FFI direct sur
@@ -143,6 +150,24 @@ clés que l'original :
 
 ## Flux des opérations
 
+### Vue d'ensemble (`overview`)
+
+```
+ps::module_available()   → check fichier : dossier versionné AudioDeviceCmdlets
+                           + manifeste sous les racines de modules (µs, caché)
+app_routing::overview_devices()   → thread d'appartement COM :
+  compteurs  → EnumAudioEndpoints (DEVICE_STATE_ACTIVE) par flux
+  défauts    → GetDefaultAudioEndpoint(flow, rôle console)
+  noms       → PKEY_Device_FriendlyName (OpenPropertyStore + GetValue)
+  volumes    → Activate(IAudioEndpointVolume) → GetMasterVolumeLevelScalar × 100
+  → objet PLAT { moduleAvailable, playbackCount, recordingCount,
+                 defaultPlayback{id,name,volume}, defaultRecording }
+```
+
+Zéro `powershell.exe` : la lecture est en millisecondes (l'ancienne
+action mettait ~2 s à démarrer PowerShell). Le contrat JSON camelCase
+plat est conservé tel quel (test `overview_serializes_flat_camel_case_payload`).
+
 ### Sauvegarde (`save_profile`)
 
 ```
@@ -185,18 +210,38 @@ choix du fichier (dialogue natif)
   → copie dans le dossier de profils (nom unique)
 ```
 
-### Veille sur les périphériques (`watchDevices`, dans `main.rs`)
+### Veille sur les périphériques (`watchDevices`, `app_routing/watch.rs`)
 
-Un thread interroge `overview` toutes les 10 s ; si les périphériques par
-défaut changent, une sauvegarde horodatée est créée et les événements
-`profiles-changed` / `devices-changed` sont émis vers l'interface.
+**Abonnement COM event-driven** (`IMMNotificationClient` de la MMDevice
+API, standard documenté) en remplacement de l'ancien sondage PowerShell
+`overview` toutes les 10 s : **zéro processus en arrière-plan**, détection
+instantanée.
+
+- un thread dédié `audio-devices-watch` (appartement MTA,
+  `RoInitialize(1)`) crée l'énumérateur, sème la baseline des défauts
+  (sortie + entrée) puis appelle `RegisterEndpointNotificationCallback`
+  (slot 6) sur un objet COM statique Rust (vtable `repr(C)`, IID
+  `7991EEC9-…`) ; il reste vivant en boucle `recv()` — pas de
+  désabonnement, la fin du processus suffit ;
+- les callbacks (threads de travail COM, **aucun message loop à pomper**)
+  ne font qu'un envoi sur un canal non borné — corps enfermé dans
+  `catch_unwind` (aucun unwind à travers la FFI) ; la sauvegarde tourne
+  sur le thread de la veille, jamais dans le callback ;
+- `WatchState` déduplique la rafale des trois rôles (console/multimédia/
+  communications) d'une même bascule → une seule sauvegarde par
+  changement réel ;
+- à chaque changement : relecture de `settings.watch_devices` (l'option
+  s'active/désactive **immédiatement**, sans redémarrage), puis sauvegarde
+  horodatée `create_auto_backup` et événements `profiles-changed` /
+  `devices-changed` émis vers l'interface.
 
 ## Correspondance avec l'application de référence (v3.1)
 
 | Référence (exe)                        | Ce projet                          |
 |-----------------------------------------|------------------------------------|
 | script `audio-config-manager-v3.ps1`    | `src-tauri/audio-config-manager.ps1` |
-| `powershell.exe -Action overview/export/preview/restore` | `ps.rs` |
+| `powershell.exe -Action export/preview/restore` | `ps.rs` |
+| `Get-AudioDevice -List` / défauts / volumes (overview) | `app_routing/devices.rs` (COM direct, `overview_devices`) |
 | commandes `save_profile`, `restore_profile`, … | `commands.rs` (mêmes noms) |
 | `settings.json` (%APPDATA%\Audio Config Manager) | `settings.rs` |
 | dossier « Audio Profiles » + profils JSON | `profiles.rs` |
@@ -265,6 +310,14 @@ active. Il n'est pas copié dans `dist/` (outil de test, non distribué).
   **« (introuvable) »** quand la route pointe vers un périphérique absent
   (SKIP si la machine n'a aucun périphérique désactivé). Lancement :
   `node e2e/apps-view.e2e.mjs`.
+- **Test E2E veille** `e2e/watch-devices.e2e.mjs` (INTRUSIF, ~15 s) :
+  bascule réelle du périphérique d'ENTRÉE par défaut (cible virtuelle
+  Voicemeeter de préférence) puis restauration — vérifie la chaîne complète
+  callback COM → `create_auto_backup` → événement `devices-changed` → fichier
+  horodaté réel, l'aller-retour (second événement à la restauration), la
+  relecture du défaut d'entrée, et **tout restaure/supprime en `finally`**
+  (défaut, option `watchDevices`, fichiers de test). Lancement :
+  `node e2e/watch-devices.e2e.mjs`.
 
 Contrainte matérielle constatée : Windows **refuse** de router par
 application vers un identifiant hors liste active (0x80070057, vérifié pour

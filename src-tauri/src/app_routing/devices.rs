@@ -3,8 +3,8 @@
 
 use super::ffi::{
     CLSCTX_ALL, DEVICE_STATE_ACTIVE, PKEY_DEVICE_FRIENDLY_NAME, STGM_READ, VT_LPWSTR,
-    CLSID_MMDEVICE_ENUMERATOR, IID_IMMDEVICE_ENUMERATOR, PropertyKey, PropVariant,
-    CoCreateInstance, CoTaskMemFree, ComRef, PropVariantClear, vtable_slot, with_apartment,
+    CLSID_MMDEVICE_ENUMERATOR, IID_IMMDEVICE_ENUMERATOR, Guid, PropertyKey, PropVariant,
+    CoCreateInstance, CoTaskMemFree, ComRef, PropVariantClear, guid, vtable_slot, with_apartment,
 };
 use super::Flow;
 
@@ -58,7 +58,8 @@ type GetIdFn = unsafe extern "system" fn(
 ) -> i32;
 
 /// Énumérateur COM (MMDeviceEnumerator) — libération automatique.
-fn device_enumerator() -> Result<ComRef, String> {
+/// `pub(super)` : réutilisé par `watch.rs` (abonnement notifications).
+pub(super) fn device_enumerator() -> Result<ComRef, String> {
     let mut enumerator_ptr = std::ptr::null_mut();
     // SAFETY : création du CLSID standard (MMDeviceEnumerator).
     let hr = unsafe {
@@ -170,12 +171,10 @@ pub fn active_devices(flow: Flow) -> Vec<(String, String)> {
     with_apartment(move || list_active_devices(flow)).unwrap_or_default()
 }
 
-/// Périphériques actifs d'un flux : `(identifiant non emballé, nom
-/// convivial)`. Le nom vient de `PKEY_Device_FriendlyName` (IPropertyStore),
-/// comme dans le panneau Son de Windows — sans passer par PowerShell.
-/// Énumération brute (sans appartement COM) — réservée aux tests et au
-/// wrapper `active_devices` ; en production, passer par `active_devices`.
-pub(super) fn list_active_devices(flow: Flow) -> Vec<(String, String)> {
+/// Nom convivial d'un périphérique (`PKEY_Device_FriendlyName` via
+/// `IPropertyStore`, emplacements 4 puis 5) — le nom affiché par le panneau
+/// Son de Windows, identique à l'ancien `$dp.Name` de PowerShell.
+pub(super) fn friendly_name(device: &ComRef) -> String {
     type OpenPropertyStoreFn = unsafe extern "system" fn(
         *mut std::ffi::c_void,
         u32,
@@ -187,6 +186,36 @@ pub(super) fn list_active_devices(flow: Flow) -> Vec<(String, String)> {
         *mut PropVariant,
     ) -> i32;
 
+    let mut name = String::new();
+    let mut store_ptr = std::ptr::null_mut();
+    // SAFETY : ouverture du magasin de propriétés du périphérique.
+    let open_store: OpenPropertyStoreFn =
+        unsafe { std::mem::transmute(vtable_slot(device.ptr(), 4)) };
+    let hr = unsafe { open_store(device.ptr(), STGM_READ, &mut store_ptr) };
+    if hr >= 0 && !store_ptr.is_null() {
+        let store = ComRef::new(store_ptr);
+        let mut value: PropVariant = unsafe { std::mem::zeroed() };
+        // SAFETY : lecture de la valeur du nom convivial.
+        let get_value: GetValueFn =
+            unsafe { std::mem::transmute(vtable_slot(store.ptr(), 5)) };
+        let hr = unsafe { get_value(store.ptr(), &PKEY_DEVICE_FRIENDLY_NAME, &mut value) };
+        if hr >= 0 && value.vt == VT_LPWSTR && !value.psz_val.is_null() {
+            let len = (0..1024).find(|&i| unsafe { *value.psz_val.add(i) } == 0).unwrap_or(0);
+            name = String::from_utf16_lossy(unsafe {
+                std::slice::from_raw_parts(value.psz_val, len)
+            });
+        }
+        // SAFETY : libération du PROPVARIANT (même si GetValue a échoué).
+        unsafe { PropVariantClear(&mut value) };
+    }
+    name
+}
+
+/// Périphériques actifs d'un flux : `(identifiant non emballé, nom
+/// convivial)`. Énumération brute (sans appartement COM) — réservée aux
+/// tests et au wrapper `active_devices` ; en production, passer par
+/// `active_devices`.
+pub(super) fn list_active_devices(flow: Flow) -> Vec<(String, String)> {
     let Some(devices) = enum_devices(flow, DEVICE_STATE_ACTIVE).unwrap_or(None) else {
         return Vec::new();
     };
@@ -196,37 +225,162 @@ pub(super) fn list_active_devices(flow: Flow) -> Vec<(String, String)> {
         let Some(device) = collection_item(&devices, index) else {
             continue;
         };
-
         let Some(id) = device_id(&device) else {
             continue;
         };
-
-        // Nom convivial via IPropertyStore (PKEY_Device_FriendlyName).
-        let mut name = String::new();
-        let mut store_ptr = std::ptr::null_mut();
-        // SAFETY : ouverture du magasin de propriétés du périphérique.
-        let open_store: OpenPropertyStoreFn =
-            unsafe { std::mem::transmute(vtable_slot(device.ptr(), 4)) };
-        let hr =
-            unsafe { open_store(device.ptr(), STGM_READ, &mut store_ptr) };
-        if hr >= 0 && !store_ptr.is_null() {
-            let store = ComRef::new(store_ptr);
-            let mut value: PropVariant = unsafe { std::mem::zeroed() };
-            // SAFETY : lecture de la valeur du nom convivial.
-            let get_value: GetValueFn =
-                unsafe { std::mem::transmute(vtable_slot(store.ptr(), 5)) };
-            let hr = unsafe { get_value(store.ptr(), &PKEY_DEVICE_FRIENDLY_NAME, &mut value) };
-            if hr >= 0 && value.vt == VT_LPWSTR && !value.psz_val.is_null() {
-                let len = (0..1024).find(|&i| unsafe { *value.psz_val.add(i) } == 0).unwrap_or(0);
-                name = String::from_utf16_lossy(unsafe {
-                    std::slice::from_raw_parts(value.psz_val, len)
-                });
-            }
-            // SAFETY : libération du PROPVARIANT (même si GetValue a échoué).
-            unsafe { PropVariantClear(&mut value) };
-        }
-
-        result.push((id, name));
+        result.push((id, friendly_name(&device)));
     }
     result
+}
+
+// ---------------------------------------------------------------------------
+// Vue d'ensemble (« overview ») — 100 % COM, remplace l'action PowerShell.
+// ---------------------------------------------------------------------------
+
+/// ERole console (0) : le rôle « périphérique par défaut » de Windows,
+/// identique à celui seedé par la veille `watch` et au panneau Son.
+const ROLE_CONSOLE: i32 = 0;
+
+// IMMDevice : 3 Activate.
+type ActivateFn = unsafe extern "system" fn(
+    *mut std::ffi::c_void,
+    *const Guid,
+    u32,
+    *mut std::ffi::c_void,
+    *mut *mut std::ffi::c_void,
+) -> i32;
+// IMMDeviceEnumerator : 4 GetDefaultAudioEndpoint.
+type GetDefaultAudioEndpointFn = unsafe extern "system" fn(
+    *mut std::ffi::c_void,
+    i32,
+    i32,
+    *mut *mut std::ffi::c_void,
+) -> i32;
+// IAudioEndpointVolume : 9 GetMasterVolumeLevelScalar.
+//
+// ORDRE VÉRIFIÉ dans le header officiel du SDK (endpointvolume.h,
+// 10.0.26100) après IUnknown (0-2) :
+//   3 RegisterControlChangeNotify · 4 UnregisterControlChangeNotify
+//   5 GetChannelCount · 6 SetMasterVolumeLevel · 7 SetMasterVolumeLevelScalar
+//   8 GetMasterVolumeLevel · 9 GetMasterVolumeLevelScalar
+// Le slot 6 est le SETTER `SetMasterVolumeLevel(float, LPCGUID)` : l'appeler
+// en lecture passait un LPCGUID en R8 (registre non initialisé par notre
+// appel) → lecture d'un pointeur poubelle → 0xC0000005 (ntdll) à chaque
+// démarrage de l'application.
+type GetMasterVolumeScalarFn =
+    unsafe extern "system" fn(*mut std::ffi::c_void, *mut f32) -> i32;
+
+/// IID IAudioEndpointVolume (endpointvolume.h).
+const IID_IAUDIO_ENDPOINT_VOLUME: Guid = guid(
+    0x5CDF_2C82,
+    0x841E,
+    0x4546,
+    [0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A],
+);
+
+/// Périphérique par défaut de la vue d'ensemble — même forme que l'ancienne
+/// réponse PowerShell (`ID`/`Name`/`Volume` → `id`/`name`/`volume`).
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DefaultDeviceInfo {
+    pub id: String,
+    pub name: String,
+    pub volume: Option<f64>,
+}
+
+/// État audio de la vue d'ensemble hors `moduleAvailable` (ajouté par la
+/// commande `overview`) : compteurs de périphériques actifs + défauts.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceOverview {
+    pub playback_count: u32,
+    pub recording_count: u32,
+    pub default_playback: Option<DefaultDeviceInfo>,
+    pub default_recording: Option<DefaultDeviceInfo>,
+}
+
+/// Volume maître d'un périphérique (0..1 → %), via
+/// `IAudioEndpointVolume::GetMasterVolumeLevelScalar` (emplacement 9),
+/// activé depuis `IMMDevice::Activate` (emplacement 3). Calcul identique à
+/// l'ancien cmdlet PowerShell (float × 100), mais sans module ni processus.
+fn master_volume_percent(device: &ComRef) -> Option<f64> {
+    let mut volume_ptr = std::ptr::null_mut();
+    // SAFETY : activation de l'interface de volume de l'endpoint.
+    let activate: ActivateFn = unsafe { std::mem::transmute(vtable_slot(device.ptr(), 3)) };
+    let hr = unsafe {
+        activate(
+            device.ptr(),
+            &IID_IAUDIO_ENDPOINT_VOLUME,
+            CLSCTX_ALL,
+            std::ptr::null_mut(),
+            &mut volume_ptr,
+        )
+    };
+    if hr < 0 || volume_ptr.is_null() {
+        return None;
+    }
+    let volume = ComRef::new(volume_ptr);
+    // SAFETY : lecture du volume maître normalisé (0..1) — slot 9 (getter),
+    // pas 6 (setter) : voir le commentaire de `GetMasterVolumeScalarFn`.
+    let get_scalar: GetMasterVolumeScalarFn =
+        unsafe { std::mem::transmute(vtable_slot(volume.ptr(), 9)) };
+    let mut scalar = 0.0f32;
+    if unsafe { get_scalar(volume.ptr(), &mut scalar) } < 0 {
+        return None;
+    }
+    Some(f64::from(scalar * 100.0))
+}
+
+/// Périphérique par défaut d'un flux (rôle console) : identifiant non
+/// emballé (même format que l'ancien `$dp.ID`), nom convivial, volume maître.
+/// `None` si aucun défaut (ex. session sans périphérique audio).
+fn default_device_info_noinit(enumerator: &ComRef, flow: Flow) -> Option<DefaultDeviceInfo> {
+    let mut device_ptr = std::ptr::null_mut();
+    // SAFETY : périphérique par défaut du flux (emplacement 4).
+    let get_default: GetDefaultAudioEndpointFn =
+        unsafe { std::mem::transmute(vtable_slot(enumerator.ptr(), 4)) };
+    let hr = unsafe { get_default(enumerator.ptr(), flow.value(), ROLE_CONSOLE, &mut device_ptr) };
+    if hr < 0 || device_ptr.is_null() {
+        return None;
+    }
+    let device = ComRef::new(device_ptr);
+    Some(DefaultDeviceInfo {
+        id: device_id(&device)?,
+        name: friendly_name(&device),
+        volume: master_volume_percent(&device),
+    })
+}
+
+/// Nombre de périphériques actifs d'un flux (`EnumAudioEndpoints`, masque
+/// DEVICE_STATE_ACTIVE) — même comptage que l'ancien
+/// `Get-AudioDevice -List`, mesuré identique sur cette machine (13/11).
+fn active_device_count(flow: Flow) -> u32 {
+    enum_devices(flow, DEVICE_STATE_ACTIVE)
+        .ok()
+        .flatten()
+        .map(|devices| collection_count(&devices))
+        .unwrap_or(0)
+}
+
+/// État audio de la vue d'ensemble — remplace intégralement l'action
+/// PowerShell `overview` : défauts (`GetDefaultAudioEndpoint`), noms
+/// (`PKEY_Device_FriendlyName`), volumes (`IAudioEndpointVolume`) et
+/// compteurs (périphériques actifs), sans lancer `powershell.exe`.
+/// Énumération brute (sans appartement) — via `overview_devices`.
+fn overview_noinit() -> Result<DeviceOverview, String> {
+    // Énumérateur vérifié une fois : erreur explicite si l'audio est à mort
+    // (l'interface affiche alors son badge « Indisponible »).
+    let enumerator = device_enumerator()?;
+    Ok(DeviceOverview {
+        playback_count: active_device_count(Flow::Output),
+        recording_count: active_device_count(Flow::Input),
+        default_playback: default_device_info_noinit(&enumerator, Flow::Output),
+        default_recording: default_device_info_noinit(&enumerator, Flow::Input),
+    })
+}
+
+/// `overview_devices`, version thread-safe : lecture sur le thread
+/// d'appartement COM (à appeler hors de l'application, ex. commandes Tauri).
+pub fn overview_devices() -> Result<DeviceOverview, String> {
+    with_apartment(overview_noinit)?
 }

@@ -9,7 +9,7 @@
 
 use serde_json::Value;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -57,13 +57,12 @@ const PS_EXE: &str = "powershell.exe";
 pub fn ensure_script(config_dir: &Path) -> Result<std::path::PathBuf, String> {
     let script_path = config_dir.join(SCRIPT_FILENAME);
 
-    // Cache : `ready()` (chaque commande) et la veille watchDevices (toutes
-    // les 10 s) rappellent cette fonction — une fois le script vérifié/écrit,
-    // on ne plus relire+recomparer tout le fichier, une simple existence
-    // suffit. Le contenu embarqué étant constant dans un processus, la
-    // comparaison complète n'est utile qu'au premier appel (ou si le fichier
-    // a été supprimé). Une optique de réécriture à chaque appel reviendrait
-    // à écraser les éditions de l'utilisateur à chaque commande.
+    // Cache : `ready()` (chaque commande) rappelle cette fonction — une fois
+    // le script vérifié/écrit, inutile de relire+recomparer tout le fichier :
+    // une simple existence suffit. Le contenu embarqué étant constant dans un
+    // processus, la comparaison complète n'est utile qu'au premier appel (ou
+    // si le fichier a été supprimé). Réécrire à chaque appel reviendrait à
+    // écraser les éditions de l'utilisateur à chaque commande.
     static ENSURED: Mutex<Option<std::path::PathBuf>> = Mutex::new(None);
     let cached = ENSURED
         .lock()
@@ -220,6 +219,7 @@ pub fn install_audio_module() -> Result<String, String> {
         |e| format!("PowerShell indisponible : {e}"),
     )?;
     if code == Some(0) {
+        invalidate_module_cache();
         Ok("Module AudioDeviceCmdlets installé.".to_string())
     } else {
         let detail = stderr.trim();
@@ -234,28 +234,89 @@ pub fn install_audio_module() -> Result<String, String> {
     }
 }
 
-/// L'état audio courant, tel que renvoyé par l'action `overview`.
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Overview {
-    pub module_available: bool,
-    pub playback_count: u32,
-    pub recording_count: u32,
-    pub default_playback: Option<DeviceInfo>,
-    pub default_recording: Option<DeviceInfo>,
+/// Disponibilité du module AudioDeviceCmdlets, sans lancer PowerShell :
+/// `Get-Module -ListAvailable` revient à chercher un dossier versionné
+/// contenant le manifeste dans les racines de modules de la session.
+/// Mis en cache (l'aperçu le relit toutes les 15 s) — invalidé par
+/// `invalidate_module_cache` après installation.
+static MODULE_AVAILABLE: Mutex<Option<bool>> = Mutex::new(None);
+
+/// Le module AudioDeviceCmdlets est-il installé ? (check fichiers, µs)
+pub fn module_available() -> bool {
+    let cached = *MODULE_AVAILABLE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(available) = cached {
+        return available;
+    }
+    let available = module_present_in(&module_roots());
+    *MODULE_AVAILABLE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(available);
+    available
 }
 
-/// Informations d'un périphérique par défaut.
-///
-/// PowerShell renvoie les clés en PascalCase (`ID`, `Name`, `Volume`) ;
-/// l'interface reçoit du camelCase (`id`, `name`, `volume`).
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
-#[serde(rename_all(serialize = "camelCase", deserialize = "PascalCase"))]
-pub struct DeviceInfo {
-    #[serde(rename(deserialize = "ID", serialize = "id"))]
-    pub id: String,
-    pub name: String,
-    pub volume: Option<f64>,
+/// Invalide le cache de `module_available` (après installation du module).
+pub fn invalidate_module_cache() {
+    *MODULE_AVAILABLE.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+}
+
+/// Racines de recherche des modules PowerShell, comme PowerShell les calcule
+/// au démarrage : modules du compte courant (sous Documents, éventuellement
+/// redirigé vers OneDrive — c'est là qu'installe
+/// `Install-Module -Scope CurrentUser`), entrées `PSModulePath` de la
+/// session, puis modules système.
+fn module_roots() -> Vec<PathBuf> {
+    fn documents_modules(base: &Path) -> [PathBuf; 2] {
+        [
+            base.join("Documents").join("WindowsPowerShell").join("Modules"),
+            base.join("Documents").join("PowerShell").join("Modules"),
+        ]
+    }
+
+    let mut roots: Vec<PathBuf> = Vec::new();
+    if let Ok(home) = std::env::var("USERPROFILE") {
+        roots.extend(documents_modules(Path::new(&home)));
+    }
+    for var in ["OneDrive", "OneDriveConsumer"] {
+        if let Ok(base) = std::env::var(var) {
+            roots.extend(documents_modules(Path::new(&base)));
+        }
+    }
+    if let Ok(psp) = std::env::var("PSModulePath") {
+        roots.extend(
+            psp.split(';')
+                .filter(|entry| !entry.is_empty())
+                .map(PathBuf::from),
+        );
+    }
+    for var in ["ProgramFiles", "ProgramFiles(x86)"] {
+        if let Ok(base) = std::env::var(var) {
+            roots.push(Path::new(&base).join("WindowsPowerShell").join("Modules"));
+            roots.push(Path::new(&base).join("PowerShell").join("Modules"));
+        }
+    }
+    roots
+}
+
+/// Existe-t-il, sous une racine, un dossier `AudioDeviceCmdlets\<version>\`
+/// contenant un manifeste (`.psd1`/`.psm1`/`.dll`) ? Équivalent fichier de
+/// `Get-Module -ListAvailable -Name AudioDeviceCmdlets`.
+fn module_present_in(roots: &[PathBuf]) -> bool {
+    const MANIFESTS: [&str; 3] = [
+        "AudioDeviceCmdlets.psd1",
+        "AudioDeviceCmdlets.psm1",
+        "AudioDeviceCmdlets.dll",
+    ];
+    roots.iter().any(|root| {
+        let Ok(versions) = std::fs::read_dir(root.join("AudioDeviceCmdlets")) else {
+            return false;
+        };
+        versions.flatten().any(|version| {
+            let dir = version.path();
+            MANIFESTS.iter().any(|file| dir.join(file).is_file())
+        })
+    })
 }
 
 /// Contenu de l'aperçu d'un profil avant restauration.
@@ -301,5 +362,19 @@ mod tests {
     fn rejects_output_without_json() {
         let out = "Index : 1\r\nDefault : True\r\n";
         assert!(parse_json_output(out).is_err());
+    }
+
+    #[test]
+    fn module_present_requires_versioned_manifest() {
+        let root = crate::profiles::temp_dir("acm-modcheck");
+        // Rien → module absent.
+        assert!(!module_present_in(std::slice::from_ref(&root)));
+        // Dossier de module sans manifeste → toujours absent.
+        let version = root.join("AudioDeviceCmdlets").join("3.1.0.2");
+        std::fs::create_dir_all(&version).unwrap();
+        assert!(!module_present_in(std::slice::from_ref(&root)));
+        // Manifeste présent → module détecté (comme Get-Module -ListAvailable).
+        std::fs::write(version.join("AudioDeviceCmdlets.psd1"), "@{}").unwrap();
+        assert!(module_present_in(&[root]));
     }
 }

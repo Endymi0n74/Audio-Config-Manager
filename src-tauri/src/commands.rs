@@ -4,9 +4,9 @@
 //! restore_profile, delete_profile, import_profile, profiles_folder,
 //! choose_profiles_folder, open_profiles_folder, install_audio_module.
 
-use crate::app_routing::{self, AppPreviewRow, AppSessionRow, DeviceList, Flow};
+use crate::app_routing::{self, AppPreviewRow, AppSessionRow, DeviceList, DeviceOverview, Flow};
 use crate::profiles::{self, ProfileEntry};
-use crate::ps::{self, Overview, PreviewInfo, RestoreInfo};
+use crate::ps::{self, PreviewInfo, RestoreInfo};
 use crate::settings::{self, Settings, ERR_CONFIG_DIR, ERR_PROFILE_PATH};
 use chrono::Local;
 use serde::Serialize;
@@ -97,6 +97,19 @@ pub struct ModuleResult {
     pub message: String,
 }
 
+/// État audio courant de la vue d'ensemble. Autrefois produit par l'action
+/// PowerShell `overview`, assemblé ici : `moduleAvailable` vient du check
+/// fichier caché (`ps::module_available`), le reste de l'énumération COM
+/// (`app_routing::overview_devices`). `flatten` conserve l'objet PLAT
+/// historique attendu par l'interface.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Overview {
+    pub module_available: bool,
+    #[serde(flatten)]
+    pub devices: DeviceOverview,
+}
+
 fn timestamp() -> String {
     Local::now().format("%Y-%m-%d %H-%M-%S").to_string()
 }
@@ -162,15 +175,22 @@ pub fn update_settings(new_settings: Settings) -> Result<Settings, String> {
 }
 
 /// État audio courant (périphériques par défaut, compteurs, module).
+///
+/// Zéro `powershell.exe` : défauts/noms/volumes lus en COM
+/// (`GetDefaultAudioEndpoint`, `PKEY_Device_FriendlyName`,
+/// `IAudioEndpointVolume`), compteurs = périphériques actifs. Contrat JSON
+/// identique à l'ancienne action `overview`, en millisecondes au lieu d'un
+/// démarrage de PowerShell (~2 s).
 #[tauri::command]
 pub async fn overview() -> Result<Overview, String> {
-    let (_, script) = ready()?;
-    let value = tauri::async_runtime::spawn_blocking(move || {
-        ps::run_script(&script, "overview", None)
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(Overview {
+            module_available: ps::module_available(),
+            devices: app_routing::overview_devices()?,
+        })
     })
     .await
-    .map_err(|e| format!("Lecture audio interrompue : {e}"))??;
-    serde_json::from_value(value).map_err(|e| format!("Réponse audio invalide : {e}"))
+    .map_err(|e| format!("Lecture audio interrompue : {e}"))?
 }
 
 /// Enregistre un nouveau profil : l'utilisateur choisit l'emplacement,
@@ -584,28 +604,33 @@ mod tests {
     }
 
     #[test]
-    fn overview_parses_module_unavailable_response() {
-        let json = r#"{"moduleAvailable":false,"playbackCount":0,"recordingCount":0,"defaultPlayback":null,"defaultRecording":null}"#;
-        let overview: Overview = serde_json::from_str(json).unwrap();
-        assert!(!overview.module_available);
-        assert!(overview.default_playback.is_none());
-    }
-
-    #[test]
-    fn device_info_parses_pascal_case_keys_from_powershell() {
-        // Sortie réelle du script : ConvertTo-Json conserve `ID`, `Name`, `Volume`.
-        let json = r#"{"defaultRecording":{"Name":"Micro USB","ID":"{3.0.1.00000001}.{A3ED9185}","Volume":null},"moduleAvailable":true,"playbackCount":1,"recordingCount":1,"defaultPlayback":{"Name":"Casque USB","ID":"{3.0.0.00000001}.{6C26BA7D}","Volume":42.0}}"#;
-        let overview: Overview = serde_json::from_str(json).unwrap();
-        assert!(overview.module_available);
-        let playback = overview.default_playback.unwrap();
-        assert_eq!(playback.name, "Casque USB");
-        assert_eq!(playback.id, "{3.0.0.00000001}.{6C26BA7D}");
-        assert_eq!(playback.volume, Some(42.0));
-        // La sérialisation vers l'interface reste en camelCase.
-        let serialized = serde_json::to_value(&playback).unwrap();
-        assert!(serialized.get("name").is_some());
-        assert!(serialized.get("id").is_some());
-        assert!(serialized.get("Name").is_none());
+    fn overview_serializes_flat_camel_case_payload() {
+        // Contrat JSON de la vue d'ensemble : objet PLAT (aucune clé
+        // imbriquée), camelCase — strictement identique à l'ancienne
+        // réponse de l'action PowerShell `overview`.
+        use crate::app_routing::DefaultDeviceInfo;
+        let overview = Overview {
+            module_available: true,
+            devices: DeviceOverview {
+                playback_count: 1,
+                recording_count: 1,
+                default_playback: Some(DefaultDeviceInfo {
+                    id: "{3.0.0.00000001}.{6C26BA7D}".into(),
+                    name: "Casque USB".into(),
+                    volume: Some(42.0),
+                }),
+                default_recording: None,
+            },
+        };
+        let value = serde_json::to_value(&overview).unwrap();
+        assert_eq!(value["moduleAvailable"], true);
+        assert_eq!(value["playbackCount"], 1);
+        assert_eq!(value["recordingCount"], 1);
+        assert_eq!(value["defaultPlayback"]["id"], "{3.0.0.00000001}.{6C26BA7D}");
+        assert_eq!(value["defaultPlayback"]["name"], "Casque USB");
+        assert_eq!(value["defaultPlayback"]["volume"], 42.0);
+        assert!(value["defaultRecording"].is_null());
+        assert!(value.get("devices").is_none(), "le payload doit rester plat");
     }
 
     #[test]
