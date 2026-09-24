@@ -14,14 +14,17 @@ dans des **profils JSON**.
 - **Profils** : sauvegarde et restauration des périphériques par défaut
   (sortie/entrée) et des volumes ; aperçu avant restauration ; import/export
   JSON ; sauvegardes automatiques (avant restauration, au démarrage, sur
-  changement de périphérique) avec rétention.
+  changement de périphérique) avec rétention. La détection des changements
+  est **event-native** (`IMMNotificationClient`, abonnement COM) : zéro
+  processus d'arrière-plan, détection instantanée.
 - **Routage par application** : choisis le périphérique de sortie et
   d'entrée de chaque application (ex. *Xbox → une autre carte son*), via
   l'API interne de Windows (`AudioPolicyConfig`).
-- **Vue d'ensemble** : état des périphériques, volumes, installation du
-  module AudioDeviceCmdlets en un clic.
+- **Vue d'ensemble** : défauts, volumes et compteurs de périphériques lus
+  **directement en COM** (sans PowerShell) en ~10 ms ; installation du
+  module AudioDeviceCmdlets en un clic (détection par check fichiers).
 - **Interface** : Mica, thème clair/sombre automatique, couleur d'accent
-  système.
+  système, version suivie automatiquement (aucun numéro codé en dur).
 
 ![Applications](docs/screens/apps.png)
 
@@ -30,6 +33,7 @@ dans des **profils JSON**.
 Exécutable portable (aucune installation) sur la page
 [Releases](https://github.com/Endymi0n74/Audio-Config-Manager/releases) —
 seule condition : le runtime WebView2 (présent par défaut sur Windows 10/11).
+Chaque release est buildée et publiée automatiquement par GitHub Actions.
 
 ## Compiler
 
