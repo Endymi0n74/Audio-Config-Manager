@@ -778,5 +778,13 @@ async function applyBackdrop() {
 // Démarrage
 applySystemAccent();
 applyBackdrop();
+// Version réelle = tauri.conf.json (bumpée à chaque release) — le HTML ne
+// contient plus de numéro en dur, il ne sert que de repli « — ».
+__TAURI__.app
+  .getVersion()
+  .then((version) => {
+    must("app-version").textContent = version;
+  })
+  .catch(() => {});
 loadOverview().catch((err) => toast(`Vue d'ensemble indisponible : ${err}`, "error"));
 loadProfiles().catch((err) => toast(`Profils indisponibles : ${err}`, "error"));
