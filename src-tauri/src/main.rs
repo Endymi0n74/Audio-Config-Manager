@@ -182,3 +182,111 @@ mod embed_test {
         );
     }
 }
+
+/// Test d'intégration anti-régression : le frontend ne doit contenir AUCUN
+/// numéro de version codé en dur. La version affichée vient de
+/// `__TAURI__.app.getVersion()` (= `tauri.conf.json`, bumpé à chaque
+/// commit `release:`) — un literal « X.Y.Z » en dur reste figé (le footer
+/// est resté « 1.0.0 » pendant plusieurs releases).
+/// `include_str!` = recompilation à chaque édition du frontend.
+#[cfg(test)]
+mod frontend_version_test {
+    /// Fichiers texte du frontend (`../src`) — `assets/` (images) exclu.
+    const FRONTEND_FILES: [(&str, &str); 3] = [
+        ("index.html", include_str!("../../src/index.html")),
+        ("main.js", include_str!("../../src/main.js")),
+        ("style.css", include_str!("../../src/style.css")),
+    ];
+
+    /// Lit la suite numérique pointée complète démarrant à `start` :
+    /// renvoie l'indice de fin (exclusive) et le nombre de composantes.
+    /// « 1.0.0 » → (…, 3) ; « 0.0.0.00000000 » (ID périph.) → (…, 4).
+    fn dotted_run(content: &str, start: usize) -> (usize, usize) {
+        let bytes = content.as_bytes();
+        let mut i = start;
+        let mut components = 0;
+        loop {
+            let digits_start = i;
+            while i < bytes.len() && bytes[i].is_ascii_digit() {
+                i += 1;
+            }
+            if i == digits_start {
+                break;
+            }
+            components += 1;
+            if i < bytes.len() && bytes[i] == b'.' {
+                i += 1;
+            } else {
+                break;
+            }
+        }
+        // Le point final (« 1.0. » en fin de phrase) ne compte pas comme
+        // composante ouverte : on recule d'un cran si le run s'est arrêté
+        // sur un point.
+        let end = if i > start && bytes[i - 1] == b'.' { i - 1 } else { i };
+        (end, components)
+    }
+
+    #[test]
+    fn no_hardcoded_version_in_frontend() {
+        let mut offenders = Vec::new();
+        for (name, content) in FRONTEND_FILES {
+            for (idx, _) in content.match_indices(|c: char| c.is_ascii_digit()) {
+                // Bornes : ni digit/point juste avant (sinon on rejoindrait le
+                // début d'un run plus long comme « 0.0.0.00000000 »).
+                let prev = content[..idx].chars().next_back();
+                if prev.is_some_and(|c| c.is_ascii_digit() || c == '.') {
+                    continue;
+                }
+                let (end, components) = dotted_run(content, idx);
+                // Exactement 3 composantes = sémver (l'ID périphérique
+                // « 0.0.0.00000000 » en a 4 → ignoré à juste titre).
+                if components == 3 {
+                    offenders.push(format!("{name} : « {} »", &content[idx..end]));
+                }
+            }
+        }
+        assert!(
+            offenders.is_empty(),
+            "numéro(s) de version codé(s) en dur dans le frontend — afficher la \n\
+             version via __TAURI__.app.getVersion() (source = tauri.conf.json) :\n  {}",
+            offenders.join("\n  ")
+        );
+    }
+
+    #[test]
+    fn footer_version_is_dynamic() {
+        // Le mécanisme dynamique doit exister des deux côtés : le placeholder
+        // HTML et le remplissage via getVersion() — sinon le footer reste « — ».
+        let html = FRONTEND_FILES[0].1;
+        assert!(
+            html.contains("id=\"app-version\""),
+            "index.html doit exposer le span #app-version (placeholder du footer)"
+        );
+        let js = FRONTEND_FILES[1].1;
+        assert!(
+            js.contains("getVersion()") && js.contains("app-version"),
+            "main.js doit remplir #app-version via __TAURI__.app.getVersion()"
+        );
+    }
+
+    #[test]
+    fn dotted_run_detects_semver_only() {
+        // Violation attendue : un sémver en dur = 3 composantes.
+        let s = "Version 1.0.0 ici";
+        let start = s.find('1').unwrap();
+        let (end, n) = dotted_run(s, start);
+        assert_eq!((&s[start..end], n), ("1.0.0", 3));
+
+        // ID de périphérique = 4 composantes → ignoré à juste titre.
+        let s = "{0.0.0.00000000}.{abc}";
+        let (_, n) = dotted_run(s, s.find('0').unwrap());
+        assert_eq!(n, 4);
+
+        // Décimale isolée ou année sans points → jamais confondue.
+        let s = "marge 0.5 et 2026";
+        let start = s.find('0').unwrap();
+        let (_, n) = dotted_run(s, start);
+        assert_ne!(n, 3);
+    }
+}
